@@ -1,0 +1,41 @@
+﻿<Window x:Class="BrutzelProg.RomConfigWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:BrutzelProg"
+        mc:Ignorable="d"
+        Title="ROM Setup" Height="272" Width="238" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid>
+        <TextBlock Text="ID:" HorizontalAlignment="Left" Margin="10,22,0,0" VerticalAlignment="Top"/>
+        <TextBlock Text="Name:" HorizontalAlignment="Left" Margin="10,62,0,0" VerticalAlignment="Top"/>
+        <TextBlock Text="CIC:" HorizontalAlignment="Left" Margin="10,92,0,0" VerticalAlignment="Top"/>
+        <TextBlock Text="TV:" HorizontalAlignment="Left" Margin="10,119,0,0" VerticalAlignment="Top" RenderTransformOrigin="-0.178,0.014"/>
+        <TextBlock Text="Save:" HorizontalAlignment="Left" Margin="10,146,0,0" VerticalAlignment="Top"/>
+        <Button Content="OK" IsDefault="True" HorizontalAlignment="Left" Margin="10,185,0,0" VerticalAlignment="Top" Width="75" Click="BtnOk_Click"/>
+        <Button Content="Cancel" IsCancel="True" HorizontalAlignment="Left" Margin="115,185,0,0" VerticalAlignment="Top" Width="75"/>
+
+        <TextBlock Text="{Binding GameId, FallbackValue=NXXE}" HorizontalAlignment="Left" Margin="70,22,0,0" VerticalAlignment="Top"/>
+        <TextBox HorizontalAlignment="Left" Height="23" Margin="70,61,0,0" TextWrapping="NoWrap" Text="{Binding GameName, FallbackValue=Game Name}" MaxLength="32" VerticalAlignment="Top" Width="120"/>
+        <ComboBox HorizontalAlignment="Left" Margin="70,89,0,0" VerticalAlignment="Top" Width="120" SelectedIndex="{Binding Cic, FallbackValue=0}">
+            <ComboBoxItem>6101/7102</ComboBoxItem>
+            <ComboBoxItem>6102/7101</ComboBoxItem>
+            <ComboBoxItem>6103/7103</ComboBoxItem>
+            <ComboBoxItem>6105/7105</ComboBoxItem>
+            <ComboBoxItem>6106/7106</ComboBoxItem>
+        </ComboBox>
+        <ComboBox HorizontalAlignment="Left" Margin="70,116,0,0" VerticalAlignment="Top" Width="120" SelectedIndex="{Binding Tv, FallbackValue=0}">
+            <ComboBoxItem>PAL</ComboBoxItem>
+            <ComboBoxItem>NTSC</ComboBoxItem>
+        </ComboBox>
+        <ComboBox HorizontalAlignment="Left" Margin="70,143,0,0" VerticalAlignment="Top" Width="120" SelectedIndex="{Binding Save, FallbackValue=0}">
+            <ComboBoxItem>None</ComboBoxItem>
+            <ComboBoxItem>EEPROM 4 KBit</ComboBoxItem>
+            <ComboBoxItem>EEPROM 16 KBit</ComboBoxItem>
+            <ComboBoxItem>SRAM 32 KiB</ComboBoxItem>
+            <ComboBoxItem>SRAM 3x32 KiB</ComboBoxItem>
+            <ComboBoxItem>FlashRAM 128 KiB</ComboBoxItem>
+        </ComboBox>
+
+    </Grid>
+</Window>

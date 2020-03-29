@@ -1,0 +1,35 @@
+﻿<Page x:Class="Brutzler.Page1"
+      xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+      xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" 
+      xmlns:d="http://schemas.microsoft.com/expression/blend/2008" 
+      xmlns:local="clr-namespace:Brutzler"
+      mc:Ignorable="d" 
+      d:DesignHeight="450" d:DesignWidth="800"
+      Background="White"
+      Title="Page1">
+    <Page.Resources>
+        <local:ByteToMbConverter x:Key="ByteToMbConverter" />
+    </Page.Resources>
+    <Grid>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,0" HorizontalAlignment="Left" >
+            <TextBlock TextWrapping="Wrap" Text="{Binding Name, FallbackValue=Game Name}" VerticalAlignment="Top" FontWeight="Bold"/>
+            <TextBlock Text=" ("/>
+            <TextBlock Text="{Binding FullId, FallbackValue=_ID_}"/>
+            <TextBlock Text=")"/>
+        </StackPanel>
+        <TextBlock HorizontalAlignment="Left" Margin="0,36,0,0" TextWrapping="Wrap" Text="Size:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="29,36,0,0" TextWrapping="Wrap" Text="{Binding Size, Converter={StaticResource ByteToMbConverter}, FallbackValue=16}" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="0,18,0,0" TextWrapping="Wrap" Text="TV:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="80,18,0,0" TextWrapping="Wrap" Text="CIC:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="80,36,0,0" TextWrapping="Wrap" Text="Save:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="29,18,0,0" TextWrapping="Wrap" Text="{Binding Tv, FallbackValue=NTSC}" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="112,18,0,0" TextWrapping="Wrap" Text="{Binding Cic, FallbackValue=6102}" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="112,36,0,0" TextWrapping="Wrap" Text="{Binding Save, FallbackValue=FlashRAM}" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="180,18,0,0" TextWrapping="Wrap" Text="Rom Offset:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="180,36,0,0" TextWrapping="Wrap" Text="Save Offset:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="250,18,0,0" TextWrapping="Wrap" Text="{Binding RomOffset, FallbackValue=32}" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="250,36,0,0" TextWrapping="Wrap" Text="{Binding SaveOffset, FallbackValue=128}" VerticalAlignment="Top"/>
+
+    </Grid>
+</Page>
