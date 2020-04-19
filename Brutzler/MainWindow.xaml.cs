@@ -346,7 +346,7 @@ namespace Brutzler
             using (DfsFileStream fs = dfs.OpenFile(DfsConfigPath, FileAccess.Write))
             {
                 byte autoBootIndex = 0xff;
-                var autoBootRom = RomList.First((e) => {
+                var autoBootRom = RomList.FirstOrDefault((e) => {
                     return e.IsAutoBoot;
                 });
                 if (autoBootRom != null)
@@ -464,14 +464,18 @@ namespace Brutzler
         }
         private void MenuItem_SetAutoboot(object sender, RoutedEventArgs e)
         {
+            MenuItem menu = sender as MenuItem;
+            RomListViewItem item = menu.DataContext as RomListViewItem;
+
+            // Remember autoboot to be able to toggle it
+            bool currentSetting = item.IsAutoBoot;
+
+            // Clear autoboot
             foreach (var romItem in RomList)
             {
                 romItem.IsAutoBoot = false;
             }
-
-            MenuItem menu = sender as MenuItem;
-            RomListViewItem item = menu.DataContext as RomListViewItem;
-            item.IsAutoBoot = true;
+            item.IsAutoBoot = !currentSetting;
         }
 
         private void MenuItem_Exit_Click(object sender, RoutedEventArgs e)
