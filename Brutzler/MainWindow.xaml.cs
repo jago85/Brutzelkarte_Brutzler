@@ -23,6 +23,9 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 using System.Xml;
 using System.Xml.Linq;
+using IniParser;
+using IniParser.Model;
+using System.Net;
 
 namespace Brutzler
 {
@@ -42,7 +45,7 @@ namespace Brutzler
         const int BootSectorSize = 4 * 1024;
         const int BootPageSize = 256;
 
-        const string DfsConfigPath = "/brutzelkarte/config";
+        const string DfsConfigPath = "/brutzelkarte/config.ini";
         const int DfsOffset = 0x200000;
 
         string ComPort = "";
@@ -78,10 +81,8 @@ namespace Brutzler
                     BrutzelConfig config = GetRomConfig(fileName);
                     if (config != null)
                     {
-                        FileInfo info = new FileInfo(fileName);
                         RomListViewItem item = new RomListViewItem(config)
                         {
-                            Size = (int)info.Length,
                             FileName = fileName
                         };
                         RomList.Add(item);
@@ -118,16 +119,21 @@ namespace Brutzler
             try
             {
                 bootSector = GetBootSectorFromFile(fileName);
+                config.RomSize = GetFileSize(fileName);
+                config.RomCrc = GetFileCrc(fileName);
             }
             catch (Exception)
             {
                 return null;
             }
             string fullId = "";
-            fullId += (char)bootSector[0x3B];
-            fullId += (char)bootSector[0x3C];
-            fullId += (char)bootSector[0x3D];
-            fullId += (char)bootSector[0x3E];
+            for (int i = 0; i < 4; i++)
+            {
+                char c = (char)bootSector[i+ 0x3B];
+                if (c == '\0')
+                    break;
+                fullId += c;
+            }
             config.FullId = fullId;
             config.Cic = GetCic(bootSector);
             config.Tv = GetTv(bootSector);
@@ -193,26 +199,39 @@ namespace Brutzler
                 }
             }
 
-            UInt32 init = 0;
-            init |= (UInt32)(bootSector[0] << 24);
-            init |= (UInt32)(bootSector[1] << 16);
-            init |= (UInt32)(bootSector[2] << 8);
-            init |= (UInt32)(bootSector[3] << 0);
-
-            if (init == 0x80371240)
+            switch (GetRomEndianess(bootSector))
             {
-                // ok
-            }
-            else if (init == 0x37804012)
-            {
-                SwapArray(bootSector);
-            }
-            else
-            {
-                throw new Exception("Invalid ROM");
+                case RomEndianess.BigEndian:
+                    break;
+                case RomEndianess.ByteSwapped:
+                    SwapArray(bootSector);
+                    break;
+                case RomEndianess.LittleEndian:
+                case RomEndianess.WordSwapped:
+                    throw new Exception("Unhandled ROM endianess");
+                default:
+                    throw new Exception("Invalid ROM");
             }
 
             return bootSector;
+        }
+
+        int GetFileSize(string filename)
+        {
+            FileInfo info = new FileInfo(filename);
+            return (int)info.Length;
+        }
+
+        UInt32 GetFileCrc(string filename)
+        {
+            byte[] buffer = File.ReadAllBytes(filename);
+
+            if (GetRomEndianess(buffer) == RomEndianess.ByteSwapped)
+            {
+                SwapArray(buffer);
+            }
+
+            return Crc32Algorithm.Compute(buffer);
         }
 
         CicType GetCic(byte[] bootSector)
@@ -345,24 +364,46 @@ namespace Brutzler
             DragonFs dfs = new DragonFs();
             using (DfsFileStream fs = dfs.OpenFile(DfsConfigPath, FileAccess.Write))
             {
-                byte autoBootIndex = 0xff;
+                int autoBootIndex = -1;
                 var autoBootRom = RomList.FirstOrDefault((e) => {
                     return e.IsAutoBoot;
                 });
                 if (autoBootRom != null)
                 {
-                    autoBootIndex = (byte)RomList.IndexOf(autoBootRom);
+                    autoBootIndex = RomList.IndexOf(autoBootRom);
                 }
 
-                fs.WriteByte((byte)RomList.Count); // number of roms
-                fs.WriteByte(autoBootIndex); // autoboot index
-                foreach (RomListViewItem item in RomList)
+                IniData iniData = new IniData();
+                iniData.Sections.AddSection("CART");
+                iniData["CART"].AddKey("NUM_ROMS", RomList.Count.ToString());
+                iniData["CART"].AddKey("AUTOBOOT", autoBootIndex.ToString());
+
+                for (int i = 0; i < RomList.Count; i++)
                 {
-                    byte[] configBytes = item.Config.GetBytes();
-                    fs.Write(configBytes, 0, configBytes.Length);
+                    RomList[i].Config.WriteToIni(iniData, i);
+                }
+
+                // Write INI data to to file
+                using (StreamWriter writer = new StreamWriter(fs))
+                {
+                    StreamIniDataParser streamIniDataParser = new StreamIniDataParser();
+                    streamIniDataParser.WriteData(writer, iniData);
                 }
             }
-            return dfs.GetImage();
+
+            byte[] dfsData = dfs.GetImage();
+            MemoryStream ms = new MemoryStream(dfsData);
+
+            // Write the size of the DFS Image to the DFS Header Node (not used for something else a.t.m.)
+            // 0xF8 -> Size (Total)
+            // 0xFC -> CRC (Data only)
+            using (BinaryWriter binaryWriter = new BinaryWriter(new MemoryStream(dfsData)))
+            {
+                binaryWriter.Seek(0xf8, SeekOrigin.Begin);
+                binaryWriter.Write(IPAddress.HostToNetworkOrder(dfsData.Length));
+            }
+
+            return dfsData;
         }
 
         void SwapArray(byte[] data)
@@ -412,7 +453,7 @@ namespace Brutzler
             return list;
         }
 
-        bool IsCartBigEndian(byte[] firstPage)
+        RomEndianess GetRomEndianess(byte[] firstPage)
         {
             UInt32 firstWord = 0;
             firstWord |= (UInt32)firstPage[3];
@@ -420,7 +461,19 @@ namespace Brutzler
             firstWord |= (UInt32)firstPage[1] << 16;
             firstWord |= (UInt32)firstPage[0] << 24;
 
-            return (firstWord == 0x80371240);
+            switch (firstWord)
+            {
+                case 0x80371240:
+                    return RomEndianess.BigEndian;
+                case 0x37804012:
+                    return RomEndianess.ByteSwapped;
+                case 0x12408037:
+                    return RomEndianess.WordSwapped;
+                case 0x40123780:
+                    return RomEndianess.LittleEndian;
+            }
+
+            return RomEndianess.Unknown;
         }
 
         void MakeByteswapped(List<byte[]> dataList)
@@ -618,7 +671,7 @@ namespace Brutzler
                 // the data will be loaded in asynchronously in the worker
                 OnLoadData = new LoadData(() => {
                     List<byte[]> pageList = GetPages(item.FileName, item.Size);
-                    if (IsCartBigEndian(pageList[0]))
+                    if (GetRomEndianess(pageList[0]) == RomEndianess.BigEndian)
                     {
                         MakeByteswapped(pageList);
                     }
@@ -669,6 +722,9 @@ namespace Brutzler
                 EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument();
                 arg.OnLoadData = new LoadData(() => {
                     byte[] config = GetConfig();
+                    
+                    File.WriteAllBytes("test.bin", config);
+
                     SwapArray(config);
                     return GetPages(config);
                 });
@@ -732,6 +788,7 @@ namespace Brutzler
                     new XAttribute("CicType", x.Cic),
                     new XAttribute("SaveType", x.Save),
                     new XAttribute("RomSize", x.Size),
+                    new XAttribute("RomCrc", x.Crc),
                     new XAttribute("IsAutoBoot", x.IsAutoBoot))));
                 using (var writer = File.CreateText(filename))
                 {
@@ -769,6 +826,12 @@ namespace Brutzler
                                 item.Cic = (CicType)Enum.Parse(typeof(CicType), elem.Attribute("CicType").Value);
                                 item.Save = (SaveType)Enum.Parse(typeof(SaveType), elem.Attribute("SaveType").Value);
                                 item.Size = int.Parse(elem.Attribute("RomSize").Value);
+                                try
+                                {
+                                    item.Crc = uint.Parse(elem.Attribute("Crc").Value);
+                                }
+                                catch (Exception)
+                                { }
                                 item.IsAutoBoot = false;
                                 XAttribute isAutoBootAttr = elem.Attribute("IsAutoBoot");
                                 if (isAutoBootAttr != null)
@@ -958,7 +1021,7 @@ namespace Brutzler
                         MessageBox.Show(ex.Message, "ERROR", MessageBoxButton.OK, MessageBoxImage.Error);
                         continue;
                     }
-                    if (IsCartBigEndian(pageList[0]))
+                    if (GetRomEndianess(pageList[0]) == RomEndianess.BigEndian)
                     {
                         MakeByteswapped(pageList);
                     }
@@ -1041,7 +1104,7 @@ namespace Brutzler
             progress.Report(info);
 
             List<byte[]> pageList = GetPages(fileName, BootMemorySize);
-            if (IsCartBigEndian(pageList[0]))
+            if (GetRomEndianess(pageList[0]) == RomEndianess.BigEndian)
             {
                 MakeByteswapped(pageList);
             }
@@ -1533,17 +1596,28 @@ namespace Brutzler
                 }
             }
         }
-
-        int _Size = 0;
         public int Size
         {
-            get => _Size;
+            get => _Config.RomSize;
             set
             {
-                if (value != _Size)
+                if (value != _Config.RomSize)
                 {
-                    _Size = value;
+                    _Config.RomSize = value;
                     OnPropertyChanged("Size");
+                }
+            }
+        }
+
+        public uint Crc
+        {
+            get => _Config.RomCrc;
+            set
+            {
+                if (value != _Config.RomCrc)
+                {
+                    _Config.RomCrc = value;
+                    OnPropertyChanged("Crc");
                 }
             }
         }
@@ -1731,5 +1805,14 @@ namespace Brutzler
         public int Size { get; set; }
         public int SectorSize { get; set; }
         public LoadData OnLoadData;
+    }
+
+    public enum RomEndianess
+    {
+        Unknown,
+        BigEndian,  // z64
+        ByteSwapped, // v64
+        LittleEndian,
+        WordSwapped
     }
 }
