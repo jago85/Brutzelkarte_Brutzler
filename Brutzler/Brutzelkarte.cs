@@ -18,6 +18,8 @@ namespace BrutzelProg
         public Brutzelkarte(string portName)
         {
             _ComPort = new SerialPort(portName, 3000000, Parity.None, 8, StopBits.One);
+            _ComPort.Handshake = Handshake.RequestToSend;
+            _ComPort.RtsEnable = true;
         }
 
         public void Open()
