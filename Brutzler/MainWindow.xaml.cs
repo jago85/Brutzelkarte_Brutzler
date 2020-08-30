@@ -40,6 +40,7 @@ namespace Brutzler
         const int RomMemorySize = 64 * 1024 * 1024;
         const int RomSectorSize = 256 * 1024;
         const int RomPageSize = 256;
+        const int RomPartitionSize = 2 * 1024 * 1024;
         const int BootMemoryOffset = RomMemorySize;
         const int BootMemorySize = 8 * 1024 * 1024;
         const int BootSectorSize = 4 * 1024;
@@ -52,6 +53,8 @@ namespace Brutzler
         public ObservableCollection<RomListViewItem> RomList { get; set; }
 
         string _ProjectFile = "";
+
+        FlashManager _FlashManager = new FlashManager(RomMemorySize / 2 / 1024 / 1024);
 
         public MainWindow()
         {
@@ -81,14 +84,25 @@ namespace Brutzler
                     BrutzelConfig config = GetRomConfig(fileName);
                     if (config != null)
                     {
-                        RomListViewItem item = new RomListViewItem(config)
+                        int partitionCount = (int)Math.Ceiling((double)config.RomSize / 2 / 1024 / 1024);
+                        config.FlashPartitions = _FlashManager.GetPartitions(partitionCount);
+                        if (config.FlashPartitions != null)
                         {
-                            FileName = fileName
-                        };
-                        RomList.Add(item);
+                            RomListViewItem item = new RomListViewItem(config)
+                            {
+                                FileName = fileName
+                            };
+                            RomList.Add(item);
+                        }
                     }
                 }
             }
+        }
+
+        void RemoveRom(RomListViewItem item)
+        {
+            _FlashManager.ReturnPartitions(item.Config.FlashPartitions);
+            RomList.Remove(item);
         }
 
         void EditRom(RomListViewItem item)
@@ -293,19 +307,14 @@ namespace Brutzler
 
         void UpdateOffsets()
         {
-            int romOffset = 0;
             int saveOffset = 0;
             for (int i = 0; i < RomList.Count; i++)
             {
-                RomList[i].RomOffset = (byte)romOffset;
                 RomList[i].SaveOffset = (byte)saveOffset;
-
-                romOffset += (byte)Math.Ceiling((float)RomList[i].Size / 1024 / 1024);
                 saveOffset += (byte)Math.Ceiling((float)GetSaveSize(RomList[i].Save) / 1024);
             }
-
-            FlashLevel = romOffset;
             SramLevel = saveOffset;
+            FlashLevel = _FlashManager.UsedPartitionCount * 2;
         }
 
         int GetSaveSize(SaveType save)
@@ -419,7 +428,7 @@ namespace Brutzler
             }
         }
 
-        List<byte[]> GetPages(string filename, int maxBytes)
+        List<byte[]> GetPages(string filename, int maxBytes, int pageSize)
         {
             List<byte[]> dataList = new List<byte[]>();
 
@@ -428,7 +437,7 @@ namespace Brutzler
                 while (fs.Position < fs.Length)
                 {
 
-                    byte[] data = new byte[256];
+                    byte[] data = new byte[pageSize];
                     fs.Read(data, 0, data.Length);
                     dataList.Add(data);
                     if (fs.Position >= maxBytes)
@@ -438,14 +447,14 @@ namespace Brutzler
             return dataList;
         }
 
-        List<byte[]> GetPages(byte[] data)
+        List<byte[]> GetPages(byte[] data, int pageSize)
         {
             List<byte[]> list = new List<byte[]>();
             using (MemoryStream ms = new MemoryStream(data))
             {
                 while (ms.Position < ms.Length)
                 {
-                    byte[] pageData = new byte[256];
+                    byte[] pageData = new byte[pageSize];
                     ms.Read(pageData, 0, pageData.Length);
                     list.Add(pageData);
                 }
@@ -513,7 +522,7 @@ namespace Brutzler
         {
             MenuItem menu = sender as MenuItem;
             RomListViewItem item = menu.DataContext as RomListViewItem;
-            RomList.Remove(item);
+            RemoveRom(item);
         }
         private void MenuItem_SetAutoboot(object sender, RoutedEventArgs e)
         {
@@ -594,7 +603,7 @@ namespace Brutzler
             if (d.ShowDialog().Value == true)
             {
                 WriteSramWorkerArgument arg = new WriteSramWorkerArgument();
-                arg.DataList = GetPages(d.FileName, SramSize * 1024);
+                arg.DataList = GetPages(d.FileName, SramSize * 1024, 256);
                 arg.Offset = 0;
                 RunTaskInProgressWindow("Restore SRAM", Action_WriteSramData, arg);
             }
@@ -634,7 +643,7 @@ namespace Brutzler
             if (d.ShowDialog().Value == true)
             {
                 WriteSramWorkerArgument arg = new WriteSramWorkerArgument();
-                arg.DataList = GetPages(d.FileName, GetSaveSize(item.Save));
+                arg.DataList = GetPages(d.FileName, GetSaveSize(item.Save), 256);
                 arg.Offset = item.SaveOffset * 1024;
                 RunTaskInProgressWindow("Restore Savegame", Action_WriteSramData, arg);
             }
@@ -660,25 +669,27 @@ namespace Brutzler
 
         private void MenuItem_FlashOneRom_Click(object sender, RoutedEventArgs e)
         {
-            MenuItem menu = sender as MenuItem;
-            RomListViewItem item = menu.DataContext as RomListViewItem;
+            // TODO: Change implementation!!!
 
-            EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument
-            {
-                Offset = RomMemoryOffset + item.RomOffset * 1024 * 1024,
-                SectorSize = RomSectorSize,
+            //MenuItem menu = sender as MenuItem;
+            //RomListViewItem item = menu.DataContext as RomListViewItem;
 
-                // the data will be loaded in asynchronously in the worker
-                OnLoadData = new LoadData(() => {
-                    List<byte[]> pageList = GetPages(item.FileName, item.Size);
-                    if (GetRomEndianess(pageList[0]) == RomEndianess.BigEndian)
-                    {
-                        MakeByteswapped(pageList);
-                    }
-                    return pageList;
-                }) 
-            };
-            RunTaskInProgressWindow("Flash one ROM", Action_EraseAndWriteFlash, arg);
+            //EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument
+            //{
+            //    Offset = RomMemoryOffset + item.RomOffset * 1024 * 1024,
+            //    SectorSize = RomSectorSize,
+
+            //    // the data will be loaded in asynchronously in the worker
+            //    OnLoadData = new LoadData(() => {
+            //        List<byte[]> pageList = GetPages(item.FileName, item.Size);
+            //        if (GetRomEndianess(pageList[0]) == RomEndianess.BigEndian)
+            //        {
+            //            MakeByteswapped(pageList);
+            //        }
+            //        return pageList;
+            //    }) 
+            //};
+            //RunTaskInProgressWindow("Flash one ROM", Action_EraseAndWriteFlash, arg);
         }
 
         private void MenuItem_EraseRomFlash_Click(object sender, RoutedEventArgs e)
@@ -726,7 +737,7 @@ namespace Brutzler
                     File.WriteAllBytes("test.bin", config);
 
                     SwapArray(config);
-                    return GetPages(config);
+                    return GetPages(config, BootPageSize);
                 });
                 arg.Offset = BootMemoryOffset + DfsOffset;
                 arg.SectorSize = BootSectorSize;
@@ -876,7 +887,8 @@ namespace Brutzler
 
         private void Button_DeleteAll_Click(object sender, RoutedEventArgs e)
         {
-            RomList.Clear();
+            while (RomList.Count > 0)
+                RemoveRom(RomList[0]);
             FlashLevel = 0;
             SramLevel = 0;
         }
@@ -978,43 +990,64 @@ namespace Brutzler
             {
                 cart.Open();
 
-                // Erase Flash
-                int sectorCount = (int)Math.Ceiling((double)FlashLevel * 1024 * 1024 / RomSectorSize);
-                for (int i = 0; i < sectorCount; i++)
+                // get total sectors-to-delete count
+                int sectorsToDelete = 0;
+                int sectorsDeleted = 1;
+                foreach (var item in RomList)
                 {
-                    ct.ThrowIfCancellationRequested();
-
-                    info.ActionText = String.Format("Erasing sector {0} / {1}", i + 1, sectorCount);
-                    info.ProgressPercent = (i + 1) * 100 / sectorCount;
-                    progress.Report(info);
-
-                    cart.EraseSector(i * RomSectorSize);
-                    if (cart.PendingAck > MaxPendingAck)
+                    foreach (var partition in item.Config.FlashPartitions)
                     {
-                        cart.WaitAck();
+                        if (partition.Dirty)
+                        {
+                            sectorsToDelete += RomPartitionSize / RomSectorSize;
+                        }
                     }
                 }
-                while (cart.PendingAck > 0)
+
+                // Erase Flash all partitions
+                for (int itemIndex = 0; itemIndex < RomList.Count; itemIndex++)
                 {
-                    cart.WaitAck();
+                    var item = RomList[itemIndex];
+                    foreach (var partition in item.Config.FlashPartitions)
+                    {
+                        if (partition.Dirty)
+                        {
+                            int bytesToDelete = RomPartitionSize;
+                            int addr = RomPartitionSize * partition.Offset;
+
+                            while (bytesToDelete > 0)
+                            {
+                                ct.ThrowIfCancellationRequested();
+                                info.ActionText = String.Format("Erasing {0} / {1}", sectorsDeleted, sectorsToDelete);
+                                info.ProgressPercent = 100 * (sectorsDeleted) / sectorsToDelete;
+                                progress.Report(info);
+
+                                cart.EraseSector(addr);
+                                cart.WaitAck();
+
+                                addr += RomSectorSize;
+                                bytesToDelete -= RomSectorSize;
+                                sectorsDeleted++;
+                            }
+                        }
+                    }
                 }
+
 
                 // Write the roms
                 foreach (RomListViewItem item in RomList)
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    int addr = item.Config.RomOffset * 1024 * 1024;
                     FileInfo fileInfo = new FileInfo(item.FileName);
                     info.ActionText = "Loading ROM: " + fileInfo.Name;
-                    info.ProgressPercent = (int)((Int64)addr * 100 / (FlashLevel * 1024 * 1024));
                     progress.Report(info);
 
                     // Load the ROM
                     List<byte[]> pageList;
                     try
                     {
-                        pageList = GetPages(item.FileName, item.Size);
+                        pageList = GetPages(item.FileName, item.Size, RomPageSize);
                     }
                     catch (Exception ex)
                     {
@@ -1027,18 +1060,42 @@ namespace Brutzler
                     }
 
                     // Write ROM data
+                    int partitionIndex = 0;
+                    int bytesLeftInPartition = RomPartitionSize;
+                    int addr = item.Config.FlashPartitions[partitionIndex].Offset * RomPartitionSize;
+
+                    int pagesWritten = 0;
                     foreach (byte[] dataPage in pageList)
                     {
                         ct.ThrowIfCancellationRequested();
 
-                        cart.WritePage(addr, dataPage);
-                        if (cart.PendingAck > MaxPendingAck)
+                        if (bytesLeftInPartition == 0)
                         {
-                            cart.WaitAck();
+                            partitionIndex++;
+                            bytesLeftInPartition = RomPartitionSize;
+                            addr = item.Config.FlashPartitions[partitionIndex].Offset * RomPartitionSize;
                         }
+
+                        if (item.Config.FlashPartitions[partitionIndex].Dirty)
+                        {
+                            cart.WritePage(addr, dataPage);
+                            if (cart.PendingAck > MaxPendingAck)
+                            {
+                                cart.WaitAck();
+                            }
+                        }
+
+                        bytesLeftInPartition -= dataPage.Length;
+
+                        if (bytesLeftInPartition == 0)
+                        {
+                            item.Config.FlashPartitions[partitionIndex].Dirty = false;
+                        }
+
                         addr += dataPage.Length;
-                        info.ActionText = String.Format("Writing {0} / {1} KiB", addr / 1024, FlashLevel * 1024);
-                        info.ProgressPercent = (int)((Int64)addr * 100 / (FlashLevel * 1024 * 1024));
+                        pagesWritten++;
+                        info.ActionText = String.Format("Writing {0}", item.Name);
+                        info.ProgressPercent = 100 * pagesWritten / pageList.Count;
                         progress.Report(info);
                     }
                     while (cart.PendingAck > 0)
@@ -1103,7 +1160,7 @@ namespace Brutzler
             info.ActionText = "Connecting";
             progress.Report(info);
 
-            List<byte[]> pageList = GetPages(fileName, BootMemorySize);
+            List<byte[]> pageList = GetPages(fileName, BootMemorySize, BootPageSize);
             if (GetRomEndianess(pageList[0]) == RomEndianess.BigEndian)
             {
                 MakeByteswapped(pageList);
@@ -1538,7 +1595,7 @@ namespace Brutzler
             if (selectedIndex >= 0)
             {
                 RomListViewItem item = RomList[selectedIndex];
-                RomList.Remove(item);
+                RemoveRom(item);
             }
         }
 
@@ -1657,19 +1714,6 @@ namespace Brutzler
                 {
                     _Config.Save = value;
                     OnPropertyChanged("Save");
-                }
-            }
-        }
-
-        public byte RomOffset
-        {
-            get => _Config.RomOffset;
-            set
-            {
-                if (value != _Config.RomOffset)
-                {
-                    _Config.RomOffset = value;
-                    OnPropertyChanged("RomOffset");
                 }
             }
         }
@@ -1814,5 +1858,129 @@ namespace Brutzler
         ByteSwapped, // v64
         LittleEndian,
         WordSwapped
+    }
+
+    public class FlashPartition
+    {
+        public byte Offset { get; set; }
+
+        public bool Dirty { get; set; }
+
+        public bool Used { get; set; }
+
+        public override string ToString()
+        {
+            return string.Format("Offset: {0}, Dirty: {1}, Used: {2}", Offset, Dirty, Used);
+        }
+    }
+
+    public class FlashManager
+    {
+        List<FlashPartition> _FlashList = new List<FlashPartition>();
+
+        public FlashManager(int partitionCount)
+        {
+            for (int i = 0; i < partitionCount; i++)
+            {
+                FlashPartition item = new FlashPartition();
+                item.Dirty = true;
+                item.Used = false;
+                item.Offset = (byte)(i);
+                _FlashList.Add(item);
+            }
+        }
+
+        // For testing: Random partition order 
+        //public FlashManager(int partitionCount)
+        //{
+        //    List<int> indexList = new List<int>();
+        //    for (int i = 0; i < partitionCount; i++)
+        //    {
+        //        indexList.Add(i);
+        //    }
+
+        //    while (indexList.Count > 0)
+        //    {
+        //        var rand = new Random();
+        //        int nextIndex = indexList[rand.Next(0, indexList.Count - 1)];
+        //        indexList.Remove(nextIndex);
+
+        //        FlashPartition item = new FlashPartition();
+        //        item.Dirty = true;
+        //        item.Used = false;
+        //        item.Offset = (byte)nextIndex;
+        //        _FlashList.Add(item);
+        //    }
+        //}
+
+        public FlashPartition[] GetPartitions(int count)
+        {
+            if (count < 1)
+                throw new ArgumentException("Must be greater than 0.", "count");
+
+            List<FlashPartition> returnList = new List<FlashPartition>();
+            foreach (var item in _FlashList)
+            {
+                if (item.Used == false)
+                {
+                    returnList.Add(item);
+                    count--;
+                    if (count == 0)
+                        break;
+                }
+            }
+
+            if (count > 0)
+            {
+                // not enough free items
+                return null;
+            }
+
+            foreach (var item in returnList)
+                item.Used = true;
+            return returnList.ToArray();
+
+        }
+
+        public FlashPartition GetPartition(byte index)
+        {
+            var partition = _FlashList[index];
+
+            if (partition.Used)
+                throw new InvalidOperationException("Partition already in use");
+
+            partition.Used = true;
+            return partition;
+        }
+
+        public void ReturnPartition(byte index)
+        {
+            if (_FlashList[index].Used == false)
+                throw new InvalidOperationException("Partition is not in use");
+
+            _FlashList[index].Used = false;
+            _FlashList[index].Dirty = true;
+        }
+
+        public void ReturnPartition(FlashPartition partition)
+        {
+            ReturnPartition(partition.Offset);
+        }
+
+        public void ReturnPartitions(FlashPartition[] partitions)
+        {
+            foreach (var item in partitions)
+                ReturnPartition(item);
+        }
+
+        public int FreePartitionCount
+        {
+            get { return _FlashList.Count((item) => { return (item.Used == false); }); }
+        }
+
+        public int UsedPartitionCount
+        {
+            get { return _FlashList.Count((item) => { return (item.Used == true); }); }
+        }
     }
 }

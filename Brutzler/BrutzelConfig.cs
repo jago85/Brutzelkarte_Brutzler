@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using Brutzler;
 using IniParser;
 using IniParser.Model;
 
@@ -37,7 +38,7 @@ namespace BrutzelProg
         public TvType Tv { get; set; }
         public CicType Cic { get; set; }
         public SaveType Save { get; set; }
-        public byte RomOffset { get; set; }  // in MiB
+        public FlashPartition[] FlashPartitions;
         public byte SaveOffset { get; set; } // in KiB
         public int RomSize { get; set; } // in Bytes
         public uint RomCrc { get; set; }
@@ -49,7 +50,6 @@ namespace BrutzelProg
             Tv = TvType.Unknown;
             Cic = CicType.Unknown;
             Save = SaveType.Unknown;
-            RomOffset = 0;
             SaveOffset = 0;
         }
 
@@ -119,18 +119,14 @@ namespace BrutzelProg
             iniData[sectionName].AddKey("SAVE_OFFSET", SaveOffset.ToString());
             iniData[sectionName].AddKey("ROM_SIZE", RomSize.ToString());
             iniData[sectionName].AddKey("ROM_CRC", RomCrc.ToString());
-            
-            // Convert the offset to mapping
-            if (RomOffset % 2 != 0)
-                throw new Exception("Cannot convert odd offset to mapping");
-
-            byte mapping = (byte)(RomOffset / 2);
 
             for (int i = 0; i < 32; i++)
             {
                 string mappingKey = "MAPPING" + i.ToString();
+                byte mapping = 0;
+                if (FlashPartitions.Length > i)
+                    mapping = FlashPartitions[i].Offset;
                 iniData[sectionName].AddKey(mappingKey, mapping.ToString());
-                mapping++;
             }
         }
     }

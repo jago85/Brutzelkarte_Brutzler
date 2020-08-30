@@ -111,9 +111,7 @@
                             <TextBlock HorizontalAlignment="Left" Margin="29,23,0,0" TextWrapping="Wrap" Text="{Binding Tv, FallbackValue=NTSC}" VerticalAlignment="Top"/>
                             <TextBlock HorizontalAlignment="Left" Margin="112,23,0,0" TextWrapping="Wrap" Text="{Binding Cic, FallbackValue=6102}" VerticalAlignment="Top"/>
                             <TextBlock HorizontalAlignment="Left" Margin="112,41,0,0" TextWrapping="Wrap" Text="{Binding Save, FallbackValue=FlashRAM}" VerticalAlignment="Top"/>
-                            <TextBlock HorizontalAlignment="Left" Margin="180,23,0,0" TextWrapping="Wrap" Text="Rom Offset:" VerticalAlignment="Top"/>
                             <TextBlock HorizontalAlignment="Left" Margin="180,41,0,0" TextWrapping="Wrap" Text="Save Offset:" VerticalAlignment="Top"/>
-                            <TextBlock HorizontalAlignment="Left" Margin="250,23,0,0" TextWrapping="Wrap" Text="{Binding RomOffset, FallbackValue=32}" VerticalAlignment="Top"/>
                             <TextBlock HorizontalAlignment="Left" Margin="250,41,0,0" TextWrapping="Wrap" Text="{Binding SaveOffset, FallbackValue=128}" VerticalAlignment="Top"/>
                         </Grid>
                     </DataTemplate>
