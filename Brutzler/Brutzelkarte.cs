@@ -24,11 +24,13 @@ namespace BrutzelProg
 
         public void Open()
         {
+            Console.WriteLine("Open Port");
             _ComPort.Open();
         }
 
         public void Close()
         {
+            Console.WriteLine("Close Port");
             // don't throw any exception
             try
             {
@@ -48,6 +50,8 @@ namespace BrutzelProg
 
         public void SendAddr(int addr)
         {
+            Console.WriteLine(String.Format("Set Addr: 0x{0:X8}", addr));
+
             StxEtxMemoryStream stream = new StxEtxMemoryStream();
             stream.StartPacket();
             stream.WriteByte(0x01);
@@ -60,6 +64,8 @@ namespace BrutzelProg
 
         public void EraseSector(int sectorAddr)
         {
+            Console.WriteLine(String.Format("Erase sector: 0x{0:X8}", sectorAddr));
+
             StxEtxMemoryStream stream = new StxEtxMemoryStream();
 
             int addr = sectorAddr / 4;
@@ -80,6 +86,8 @@ namespace BrutzelProg
 
         public void WritePage(int pageAddr, byte[] data)
         {
+            Console.WriteLine(String.Format("Write page: 0x{0:X8}", pageAddr));
+
             if ((pageAddr % 2) != 0)
                 throw new ArgumentException("pageAddr must be dword aligned");
 
