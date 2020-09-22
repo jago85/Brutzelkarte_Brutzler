@@ -76,6 +76,7 @@
     <Compile Include="RomConfigWindow.xaml.cs">
       <DependentUpon>RomConfigWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="SaveRamManager.cs" />
     <Compile Include="SetRtcWindow.xaml.cs">
       <DependentUpon>SetRtcWindow.xaml</DependentUpon>
     </Compile>
