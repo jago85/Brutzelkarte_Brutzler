@@ -44,8 +44,6 @@
             <MenuItem Header="Backup Savegame" Click="MenuItem_BackupSave_Click" Style="{StaticResource ListMenuItemSaveGame}"/>
             <MenuItem Header="Restore Savegame" Click="MenuItem_RestoreSave_Click" Style="{StaticResource ListMenuItemSaveGame}"/>
             <MenuItem Header="Clear Savegame" Click="MenuItem_ClearSave_Click" Style="{StaticResource ListMenuItemSaveGame}"/>
-            <Separator/>
-            <MenuItem Header="Flash this only" Click="MenuItem_FlashOneRom_Click"/>
         </ContextMenu>
     </Window.Resources>
     <Window.CommandBindings>
@@ -54,6 +52,7 @@
     <DockPanel LastChildFill="True">
         <Menu DockPanel.Dock="Top" IsMainMenu="True">
             <MenuItem Header="File">
+                <MenuItem Header="Connect" Click="MenuItem_ConnectClick"/>
                 <MenuItem Header="Open Project" Click="MenuItem_LoadProject_Click"/>
                 <MenuItem Header="Save Project" Click="MenuItem_SaveProject_Click"/>
                 <MenuItem Header="Save Project as" Click="MenuItem_SaveProjectAs_Click"/>
@@ -81,7 +80,7 @@
             </MenuItem>
         </Menu>
         <Grid>
-            <ListBox Name="LbRoms" Margin="200,12,10,11" ItemsSource="{Binding RomList}" SelectedItem="{Binding SelectedItem}">
+            <ListBox Name="LbRoms" Margin="200,12,10,11" ItemsSource="{Binding RomList}" SelectedItem="{Binding SelectedItem}" AllowDrop="True" DragEnter="LbRoms_DragEnter" Drop="LbRoms_Drop">
                 <ListBox.ItemContainerStyle>
                     <Style TargetType="{x:Type ListBoxItem}">
                         <Setter Property="ContextMenu" Value="{StaticResource ListItemContextMenu}"/>
@@ -111,6 +110,8 @@
                             <TextBlock HorizontalAlignment="Left" Margin="29,23,0,0" TextWrapping="Wrap" Text="{Binding Tv, FallbackValue=NTSC}" VerticalAlignment="Top"/>
                             <TextBlock HorizontalAlignment="Left" Margin="112,23,0,0" TextWrapping="Wrap" Text="{Binding Cic, FallbackValue=6102}" VerticalAlignment="Top"/>
                             <TextBlock HorizontalAlignment="Left" Margin="112,41,0,0" TextWrapping="Wrap" Text="{Binding Save, FallbackValue=FlashRAM}" VerticalAlignment="Top"/>
+                            <TextBlock HorizontalAlignment="Left" Margin="180,23,0,0" TextWrapping="Wrap" Text="IsFlashed:" VerticalAlignment="Top"/>
+                            <TextBlock HorizontalAlignment="Left" Margin="250,23,0,0" TextWrapping="Wrap" Text="{Binding IsFlashed, FallbackValue=false}" VerticalAlignment="Top"/>
                             <TextBlock HorizontalAlignment="Left" Margin="180,41,0,0" TextWrapping="Wrap" Text="Save Offset:" VerticalAlignment="Top"/>
                             <TextBlock HorizontalAlignment="Left" Margin="250,41,0,0" TextWrapping="Wrap" Text="{Binding SaveOffset, FallbackValue=128}" VerticalAlignment="Top"/>
                         </Grid>

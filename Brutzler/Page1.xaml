@@ -16,20 +16,20 @@
             <TextBlock TextWrapping="Wrap" Text="{Binding Name, FallbackValue=Game Name}" VerticalAlignment="Top" FontWeight="Bold"/>
             <TextBlock Text=" ("/>
             <TextBlock Text="{Binding FullId, FallbackValue=_ID_}"/>
-            <TextBlock Text=")"/>
+            <TextBlock Text=") "/>
         </StackPanel>
-        <TextBlock HorizontalAlignment="Left" Margin="0,36,0,0" TextWrapping="Wrap" Text="Size:" VerticalAlignment="Top"/>
-        <TextBlock HorizontalAlignment="Left" Margin="29,36,0,0" TextWrapping="Wrap" Text="{Binding Size, Converter={StaticResource ByteToMbConverter}, FallbackValue=16}" VerticalAlignment="Top"/>
-        <TextBlock HorizontalAlignment="Left" Margin="0,18,0,0" TextWrapping="Wrap" Text="TV:" VerticalAlignment="Top"/>
-        <TextBlock HorizontalAlignment="Left" Margin="80,18,0,0" TextWrapping="Wrap" Text="CIC:" VerticalAlignment="Top"/>
-        <TextBlock HorizontalAlignment="Left" Margin="80,36,0,0" TextWrapping="Wrap" Text="Save:" VerticalAlignment="Top"/>
-        <TextBlock HorizontalAlignment="Left" Margin="29,18,0,0" TextWrapping="Wrap" Text="{Binding Tv, FallbackValue=NTSC}" VerticalAlignment="Top"/>
-        <TextBlock HorizontalAlignment="Left" Margin="112,18,0,0" TextWrapping="Wrap" Text="{Binding Cic, FallbackValue=6102}" VerticalAlignment="Top"/>
-        <TextBlock HorizontalAlignment="Left" Margin="112,36,0,0" TextWrapping="Wrap" Text="{Binding Save, FallbackValue=FlashRAM}" VerticalAlignment="Top"/>
-        <TextBlock HorizontalAlignment="Left" Margin="180,18,0,0" TextWrapping="Wrap" Text="Rom Offset:" VerticalAlignment="Top"/>
-        <TextBlock HorizontalAlignment="Left" Margin="180,36,0,0" TextWrapping="Wrap" Text="Save Offset:" VerticalAlignment="Top"/>
-        <TextBlock HorizontalAlignment="Left" Margin="250,18,0,0" TextWrapping="Wrap" Text="{Binding RomOffset, FallbackValue=32}" VerticalAlignment="Top"/>
-        <TextBlock HorizontalAlignment="Left" Margin="250,36,0,0" TextWrapping="Wrap" Text="{Binding SaveOffset, FallbackValue=128}" VerticalAlignment="Top"/>
-
+        <Image Visibility="{Binding IsAutoBoot, Converter={StaticResource BoolToVisConverter}}" VerticalAlignment="Top" HorizontalAlignment="Right" Source="/Brutzler;component/icons/autoboot.png" Stretch="None"/>
+        <TextBlock HorizontalAlignment="Left" Margin="0,41,0,0" TextWrapping="Wrap" Text="Size:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="29,41,0,0" TextWrapping="Wrap" Text="{Binding Size, Converter={StaticResource ByteToMbConverter}, FallbackValue=16}" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="0,23,0,0" TextWrapping="Wrap" Text="TV:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="80,23,0,0" TextWrapping="Wrap" Text="CIC:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="80,41,0,0" TextWrapping="Wrap" Text="Save:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="29,23,0,0" TextWrapping="Wrap" Text="{Binding Tv, FallbackValue=NTSC}" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="112,23,0,0" TextWrapping="Wrap" Text="{Binding Cic, FallbackValue=6102}" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="112,41,0,0" TextWrapping="Wrap" Text="{Binding Save, FallbackValue=FlashRAM}" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="180,23,0,0" TextWrapping="Wrap" Text="IsFlashed:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="250,23,0,0" TextWrapping="Wrap" Text="{Binding IsFlashed, FallbackValue=false}" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="180,41,0,0" TextWrapping="Wrap" Text="Save Offset:" VerticalAlignment="Top"/>
+        <TextBlock HorizontalAlignment="Left" Margin="250,41,0,0" TextWrapping="Wrap" Text="{Binding SaveOffset, FallbackValue=128}" VerticalAlignment="Top"/>
     </Grid>
 </Page>

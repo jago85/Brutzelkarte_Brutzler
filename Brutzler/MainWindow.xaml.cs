@@ -26,6 +26,8 @@ using System.Xml.Linq;
 using IniParser;
 using IniParser.Model;
 using System.Net;
+using IniParser.Parser;
+using System.CodeDom;
 
 namespace Brutzler
 {
@@ -46,6 +48,9 @@ namespace Brutzler
         const int BootSectorSize = 4 * 1024;
         const int BootPageSize = 256;
 
+        const int SaveRamSize = 256 * 1024;
+        const int SaveRamFragmentSize = 1024;
+
         const string DfsConfigPath = "/brutzelkarte/config.ini";
         const int DfsOffset = 0x200000;
 
@@ -54,7 +59,8 @@ namespace Brutzler
 
         string _ProjectFile = "";
 
-        FlashManager _FlashManager = new FlashManager(RomMemorySize / 2 / 1024 / 1024);
+        FlashManager _FlashManager = new FlashManager(RomMemorySize / RomPartitionSize, RomPartitionSize);
+        SaveRamManager _SaveRamManager = new SaveRamManager(SaveRamSize, SaveRamFragmentSize);
 
         public MainWindow()
         {
@@ -72,36 +78,68 @@ namespace Brutzler
             UpdateOffsets();
         }
 
-        void AddRom()
+        void AddRomDialog()
         {
             OpenFileDialog d = new OpenFileDialog();
             d.Multiselect = true;
-            d.Filter = "rom files (*.v64;*.z64)|*.v64;*.z64|all files|*.*";
+            d.Filter = "rom files (*.v64;*.z64;*.n64)|*.v64;*.z64;*.n64|all files|*.*";
             if (d.ShowDialog(this).Value == true)
             {
-                foreach (string fileName in d.FileNames)
+                AddRoms(d.FileNames);
+            }
+        }
+
+        void AddRoms(string[] files)
+        {
+            if (files == null)
+                return;
+
+            foreach (string fileName in files)
+            {
+                string extension = System.IO.Path.GetExtension(fileName).ToLower();
+                if ((extension == ".v64")
+                        || (extension == ".z64")
+                        || (extension == ".n64"))
                 {
-                    BrutzelConfig config = GetRomConfig(fileName);
-                    if (config != null)
-                    {
-                        int partitionCount = (int)Math.Ceiling((double)config.RomSize / 2 / 1024 / 1024);
-                        config.FlashPartitions = _FlashManager.GetPartitions(partitionCount);
-                        if (config.FlashPartitions != null)
-                        {
-                            RomListViewItem item = new RomListViewItem(config)
-                            {
-                                FileName = fileName
-                            };
-                            RomList.Add(item);
-                        }
-                    }
+                    AddRom(fileName);
                 }
+            }
+        }
+
+        void AddRom(string fileName)
+        {
+            BrutzelConfig config = GetRomConfig(fileName);
+            if (config != null)
+            {
+                int partitionCount = (int)Math.Ceiling((double)config.RomSize / RomPartitionSize);
+                int saveSize = GetSaveSize(config.Save);
+
+                if (_FlashManager.FreePartitionCount < partitionCount)
+                    throw new Exception("Not enough Flash");
+                if (_SaveRamManager.BytesFree < saveSize)
+                    throw new Exception("Not enough save RAM");
+
+                config.FlashPartitions = _FlashManager.GetPartitions(partitionCount);
+                if (saveSize > 0)
+                {
+                    config.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
+                }
+
+                RomListViewItem item = new RomListViewItem(config)
+                {
+                    FileName = fileName
+                };
+                RomList.Add(item);
             }
         }
 
         void RemoveRom(RomListViewItem item)
         {
             _FlashManager.ReturnPartitions(item.Config.FlashPartitions);
+            if (GetSaveSize(item.Save) > 0)
+            {
+                _SaveRamManager.Return((int)item.SaveOffset * SaveRamFragmentSize);
+            }
             RomList.Remove(item);
         }
 
@@ -307,14 +345,8 @@ namespace Brutzler
 
         void UpdateOffsets()
         {
-            int saveOffset = 0;
-            for (int i = 0; i < RomList.Count; i++)
-            {
-                RomList[i].SaveOffset = (byte)saveOffset;
-                saveOffset += (byte)Math.Ceiling((float)GetSaveSize(RomList[i].Save) / 1024);
-            }
-            SramLevel = saveOffset;
             FlashLevel = _FlashManager.UsedPartitionCount * 2;
+            SramLevel = (SaveRamSize - _SaveRamManager.BytesFree) / 1024;
         }
 
         int GetSaveSize(SaveType save)
@@ -401,18 +433,54 @@ namespace Brutzler
             }
 
             byte[] dfsData = dfs.GetImage();
-            MemoryStream ms = new MemoryStream(dfsData);
+            return dfsData;
+        }
 
-            // Write the size of the DFS Image to the DFS Header Node (not used for something else a.t.m.)
-            // 0xF8 -> Size (Total)
-            // 0xFC -> CRC (Data only)
-            using (BinaryWriter binaryWriter = new BinaryWriter(new MemoryStream(dfsData)))
+        IniData ReadConfigFromCart()
+        {
+            Brutzelkarte cart = new Brutzelkarte(ComPort);
+
+            cart.Open();
+            cart.ReadVersion();
+            cart.SendAddr((BootMemoryOffset + DfsOffset) / 4);
+
+            MemoryStream ms = new MemoryStream();
+
+            var dat = cart.ReadFlashPage();
+            SwapArray(dat);
+            ms.Write(dat, 0, dat.Length);
+
+            int sectorCount = (int)Utils.ReadArrayBigEndianUint32(dat, (int)DfsSector.SECTOR_SIZE - 8);
+
+            for (int i = 0; i < sectorCount; i++)
             {
-                binaryWriter.Seek(0xf8, SeekOrigin.Begin);
-                binaryWriter.Write(IPAddress.HostToNetworkOrder(dfsData.Length));
+                dat = cart.ReadFlashPage();
+                SwapArray(dat);
+                ms.Write(dat, 0, dat.Length);
             }
 
-            return dfsData;
+            byte[] configData = ms.ToArray();
+
+            IniData iniDat = null;
+            try
+            {
+                DragonFs fs = DragonFs.CreateFromStream(new MemoryStream(configData));
+                var file = fs.OpenFile(DfsConfigPath, FileAccess.Read);
+
+                StreamReader reader = new StreamReader(file);
+                String iniString = reader.ReadToEnd();
+
+                IniDataParser parser = new IniDataParser();
+                iniDat = parser.Parse(iniString);
+            }
+            catch (Exception)
+            {
+                
+            }
+
+            cart.Close();
+
+            return iniDat;
         }
 
         void SwapArray(byte[] data)
@@ -515,7 +583,7 @@ namespace Brutzler
 
         private void MenuItem_AddRom_Click(object sender, RoutedEventArgs e)
         {
-            AddRom();
+            AddRomDialog();
         }
 
         private void MenuItem_Delete_Click(object sender, RoutedEventArgs e)
@@ -590,7 +658,7 @@ namespace Brutzler
             {
                 ReadSramWorkerArgument arg = new ReadSramWorkerArgument();
                 arg.Offset = 0;
-                arg.Size = 256 * 1024;
+                arg.Size = SaveRamSize;
                 arg.FileName = d.FileName;
                 RunTaskInProgressWindow("Dump SRAM", Action_ReadSramData, arg);
             }
@@ -603,7 +671,7 @@ namespace Brutzler
             if (d.ShowDialog().Value == true)
             {
                 WriteSramWorkerArgument arg = new WriteSramWorkerArgument();
-                arg.DataList = GetPages(d.FileName, SramSize * 1024, 256);
+                arg.DataList = GetPages(d.FileName, SaveRamSize, 256);
                 arg.Offset = 0;
                 RunTaskInProgressWindow("Restore SRAM", Action_WriteSramData, arg);
             }
@@ -621,7 +689,7 @@ namespace Brutzler
             {
                 int size = GetSaveSize(item.Save);
                 WriteSramWorkerArgument arg = new WriteSramWorkerArgument();
-                arg.Offset = item.SaveOffset * 1024;
+                arg.Offset = item.SaveOffset * SaveRamFragmentSize;
                 arg.DataList = new List<byte[]>();
                 while (size > 0)
                 {
@@ -644,7 +712,7 @@ namespace Brutzler
             {
                 WriteSramWorkerArgument arg = new WriteSramWorkerArgument();
                 arg.DataList = GetPages(d.FileName, GetSaveSize(item.Save), 256);
-                arg.Offset = item.SaveOffset * 1024;
+                arg.Offset = item.SaveOffset * SaveRamFragmentSize;
                 RunTaskInProgressWindow("Restore Savegame", Action_WriteSramData, arg);
             }
         }
@@ -660,36 +728,11 @@ namespace Brutzler
             if (d.ShowDialog().Value == true)
             {
                 ReadSramWorkerArgument arg = new ReadSramWorkerArgument();
-                arg.Offset = item.SaveOffset * 1024;
+                arg.Offset = item.SaveOffset * SaveRamFragmentSize;
                 arg.Size = GetSaveSize(item.Save);
                 arg.FileName = d.FileName;
                 RunTaskInProgressWindow("Backup Savegame", Action_ReadSramData, arg);
             }
-        }
-
-        private void MenuItem_FlashOneRom_Click(object sender, RoutedEventArgs e)
-        {
-            // TODO: Change implementation!!!
-
-            //MenuItem menu = sender as MenuItem;
-            //RomListViewItem item = menu.DataContext as RomListViewItem;
-
-            //EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument
-            //{
-            //    Offset = RomMemoryOffset + item.RomOffset * 1024 * 1024,
-            //    SectorSize = RomSectorSize,
-
-            //    // the data will be loaded in asynchronously in the worker
-            //    OnLoadData = new LoadData(() => {
-            //        List<byte[]> pageList = GetPages(item.FileName, item.Size);
-            //        if (GetRomEndianess(pageList[0]) == RomEndianess.BigEndian)
-            //        {
-            //            MakeByteswapped(pageList);
-            //        }
-            //        return pageList;
-            //    }) 
-            //};
-            //RunTaskInProgressWindow("Flash one ROM", Action_EraseAndWriteFlash, arg);
         }
 
         private void MenuItem_EraseRomFlash_Click(object sender, RoutedEventArgs e)
@@ -811,6 +854,36 @@ namespace Brutzler
                 MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
+        private void MenuItem_ConnectClick(object sender, RoutedEventArgs e)
+        {
+            var iniDat = ReadConfigFromCart();
+            int numRoms = int.Parse(iniDat.Sections["CART"].GetKeyData("NUM_ROMS").Value);
+
+            for (int romIndex = 0; romIndex < numRoms; romIndex++)
+            {
+                BrutzelConfig config = BrutzelConfig.CreateFromIniIniData(iniDat, romIndex);
+                List<FlashPartition> partitionList = new List<FlashPartition>();
+                for (int i = 0; i < 32; i++)
+                {
+                    if (config.RomSize <= i * _FlashManager.PartitionSize)
+                        break;
+
+                    string sectionName = "ROM" + romIndex.ToString();
+                    string mappingKey = "MAPPING" + i.ToString();
+                    byte mapping = byte.Parse(iniDat[sectionName].GetKeyData(mappingKey).Value);
+                    FlashPartition partition = _FlashManager.GetPartition(mapping);
+                    partition.Dirty = false;
+                    partitionList.Add(partition);
+                    
+                }
+                config.FlashPartitions = partitionList.ToArray();
+                RomListViewItem item = new RomListViewItem(config);
+                item.IsFlashed = true;
+                RomList.Add(item);
+            }
+        }
+
+
 
         private void MenuItem_LoadProject_Click(object sender, RoutedEventArgs e)
         {
@@ -882,7 +955,7 @@ namespace Brutzler
 
         private void Button_AddRom_Click(object sender, RoutedEventArgs e)
         {
-            AddRom();
+            AddRomDialog();
         }
 
         private void Button_DeleteAll_Click(object sender, RoutedEventArgs e)
@@ -900,7 +973,7 @@ namespace Brutzler
                 MessageBox.Show("The ROMs in the list require too much FLASH.\r\nPlease remove some ROMs.", "Not enough FLASH", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
-            if (SramLevel > SramSize)
+            if (SramLevel > SaveRamSize / 1024)
             {
                 MessageBox.Show("The ROMs in the list require too much SRAM.\r\nPlease remove some ROMs.", "Not enough SRAM", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
@@ -972,8 +1045,6 @@ namespace Brutzler
             }
         }
 
-        public int SramSize = 256;
-
         RomListViewItem SelectedItem { get; set; }
         #endregion
 
@@ -1038,6 +1109,9 @@ namespace Brutzler
                 foreach (RomListViewItem item in RomList)
                 {
                     ct.ThrowIfCancellationRequested();
+
+                    if (item.IsFlashed == true)
+                        continue;
 
                     FileInfo fileInfo = new FileInfo(item.FileName);
                     info.ActionText = "Loading ROM: " + fileInfo.Name;
@@ -1150,6 +1224,12 @@ namespace Brutzler
             {
                 cart.Close();
             }
+
+            foreach (RomListViewItem item in RomList)
+            {
+                item.IsFlashed = true;
+            }
+
         }
 
         void Action_UpdateBootloader(IProgress<ProgressWindowInfo> progress, CancellationToken ct, object argument)
@@ -1600,6 +1680,21 @@ namespace Brutzler
         }
 
         #endregion
+
+        private void LbRoms_DragEnter(object sender, DragEventArgs e)
+        {
+
+            if (e.Data.GetDataPresent(DataFormats.FileDrop))
+                e.Effects = DragDropEffects.Copy;
+            else
+                e.Effects = DragDropEffects.None;
+        }
+
+        private void LbRoms_Drop(object sender, DragEventArgs e)
+        {
+            var files = e.Data.GetData(DataFormats.FileDrop) as string[];
+            AddRoms(files);
+        }
     }
 
     public class RomListViewItem : INotifyPropertyChanged
@@ -1759,6 +1854,20 @@ namespace Brutzler
             }
         }
 
+        private bool _IsFlashed = false;
+        public bool IsFlashed
+        {
+            get => _IsFlashed;
+            set
+            {
+                if (value != _IsFlashed)
+                {
+                    _IsFlashed = value;
+                    OnPropertyChanged("IsFlashed");
+                }
+            }
+        }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         void OnPropertyChanged(string name)
@@ -1877,9 +1986,11 @@ namespace Brutzler
     public class FlashManager
     {
         List<FlashPartition> _FlashList = new List<FlashPartition>();
+        int _PartitionSize;
 
-        public FlashManager(int partitionCount)
+        public FlashManager(int partitionCount, int partitionSize)
         {
+            _PartitionSize = partitionSize;
             for (int i = 0; i < partitionCount; i++)
             {
                 FlashPartition item = new FlashPartition();
@@ -1981,6 +2092,11 @@ namespace Brutzler
         public int UsedPartitionCount
         {
             get { return _FlashList.Count((item) => { return (item.Used == true); }); }
+        }
+
+        public int PartitionSize
+        {
+            get => _PartitionSize;
         }
     }
 }
