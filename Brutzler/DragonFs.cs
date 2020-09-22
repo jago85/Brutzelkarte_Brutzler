@@ -1,5 +1,7 @@
-﻿using System;
+﻿using Crc32;
+using System;
 using System.Collections.Generic;
+using System.Data;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -270,8 +272,28 @@ namespace DragonFS
             directoryEntry.NextEntry = offset;
         }
 
+        // This is an extension to the normal DFS
+        // The Root sector contains the number of sectors (@ SECTOR_SIZE - 8)
+        // and the CRC32 of all payload sectors (@ SECTOR_SIZE - 4)
+        private void UpdateMetadata()
+        {
+            // minus root sector
+            int sectorCount = _SectorList.Count - 1;
+            byte[] buffer = _SectorList[0].Buffer;
+            Utils.WriteArrayBigEndian(buffer, (int)DfsSector.SECTOR_SIZE - 8, (uint)sectorCount);
+
+            byte[] buf = new byte[(_SectorList.Count - 1) * DfsSector.SECTOR_SIZE];
+            for (int i = 1; i < _SectorList.Count; i++)
+            {
+                _SectorList[i].Buffer.CopyTo(buf, (i - 1) * DfsSector.SECTOR_SIZE);
+            }
+            uint crc = Crc32Algorithm.Compute(buf);
+            Utils.WriteArrayBigEndian(buffer, (int)DfsSector.SECTOR_SIZE - 4, crc);
+        }
+
         public void WriteToStream(Stream s)
         {
+            UpdateMetadata();
             foreach (var sector in _SectorList)
             {
                 s.Write(sector.Buffer, 0, (int)sector.Size);
@@ -300,7 +322,66 @@ namespace DragonFS
                 sector = newFs.NewSector();
                 source.Read(sector.Buffer, 0, (int)DfsSector.SECTOR_SIZE);
             }
+
+            // The virtual root directory entry needs to point to the first sector
+            // TODO: Can this be done better?
+            newFs._RootDirectory.FilePointer = DfsSector.SECTOR_SIZE;
+
             return newFs;
+        }
+
+        public void TestSectorsReferences()
+        {
+            List<DfsSector> sectors = new List<DfsSector>(_SectorList);
+            sectors.Remove(FindSector(0));
+            DfsDirectoryEntry currentDir = _RootDirectory;
+            WalkDirectory(_RootDirectory, sectors);
+
+        }
+
+        private void WalkDirectory(DfsDirectoryEntry dir, List<DfsSector> sectors)
+        {
+            do
+            {
+                var sector = FindSector(dir.Offset);
+                sectors.Remove(sector);
+                if (dir.FilePointer != 0)
+                {
+                    sector = FindSector(dir.FilePointer);
+                    var entry = new DfsDirectoryEntry(sector);
+
+                    if ((entry.Flags & DfsDirectoryEntry.FLAG_DIR) != 0)
+                    {
+                        WalkDirectory(entry, sectors);
+                    }
+                    else
+                    //if ((entry.Flags & DfsDirectoryEntry.FLAG_FILE) != 0)
+                    {
+                        sectors.Remove(sector);
+                        sector = FindSector(entry.FilePointer);
+                        WalkFile(new DfsFileEntry(sector), sectors);
+                    }
+                }
+
+                if (dir.NextEntry == 0)
+                    break;
+                dir = new DfsDirectoryEntry(FindSector(dir.NextEntry));
+            } while (true);
+        }
+
+        private void WalkFile(DfsFileEntry file, List<DfsSector> sectors)
+        {
+            do
+            {
+                var sector = FindSector(file.Offset);
+                sectors.Remove(sector);
+                file = new DfsFileEntry(sector);
+
+                if (file.NextSector == 0)
+                    break;
+                file = new DfsFileEntry(FindSector(file.NextSector));
+            }
+            while (true);
         }
     }
 
