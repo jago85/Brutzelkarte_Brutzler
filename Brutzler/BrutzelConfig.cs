@@ -66,6 +66,18 @@ namespace BrutzelProg
             throw new Exception("Unknown TV");
         }
 
+        private static TvType GetTvFromString(string tv)
+        {
+            switch (tv)
+            {
+                case "NTSC":
+                    return TvType.Ntsc;
+                case "PAL":
+                    return TvType.Pal;
+            }
+            throw new Exception("Unknown TV");
+        }
+
         private string GetCicString()
         {
             switch (Cic)
@@ -82,6 +94,24 @@ namespace BrutzelProg
                     return "6106";
             }
 
+            throw new Exception("Unknown CIC");
+        }
+
+        private static CicType GetCicFromString(string cic)
+        {
+            switch (cic)
+            {
+                case "6101":
+                    return CicType.Cic6101;
+                case "6102":
+                    return CicType.Cic6102;
+                case "6103":
+                    return CicType.Cic6103;
+                case "6105":
+                    return CicType.Cic6105;
+                case "6106":
+                    return CicType.Cic6106;
+            }
             throw new Exception("Unknown CIC");
         }
 
@@ -106,14 +136,34 @@ namespace BrutzelProg
             throw new Exception("Unknown CIC");
         }
 
+        private static SaveType GetSaveFromString(string save)
+        {
+            switch (save)
+            {
+                case "OFF":
+                    return SaveType.None;
+                case "EEP4K":
+                    return SaveType.Eep4K;
+                case "EEP16K":
+                    return SaveType.Eep16K;
+                case "SRAM32":
+                    return SaveType.Sram32;
+                case "SRAM32x3":
+                    return SaveType.Sram32x3;
+                case "FLASHRAM":
+                    return SaveType.FlashRam;
+            }
+            throw new Exception("Unknown CIC");
+        }
+
         public void WriteToIni(IniData iniData, int romIndex)
         {
             string sectionName = "ROM" + romIndex.ToString();
             iniData.Sections.AddSection(sectionName);
+            iniData[sectionName].AddKey("FULL_ID", FullId);
             iniData[sectionName].AddKey("ID", Id);
             iniData[sectionName].AddKey("NAME", Name);
             iniData[sectionName].AddKey("TV", GetTvString());
-            iniData[sectionName].AddKey("CIC", GetCicString());
             iniData[sectionName].AddKey("CIC", GetCicString());
             iniData[sectionName].AddKey("SAVE", GetSaveString());
             iniData[sectionName].AddKey("SAVE_OFFSET", SaveOffset.ToString());
@@ -128,6 +178,25 @@ namespace BrutzelProg
                     mapping = FlashPartitions[i].Offset;
                 iniData[sectionName].AddKey(mappingKey, mapping.ToString());
             }
+
+        }
+
+        public static BrutzelConfig CreateFromIniIniData(IniData iniData, int romIndex)
+        {
+            string sectionName = "ROM" + romIndex.ToString();
+            BrutzelConfig cfg = new BrutzelConfig();
+            cfg.FullId = iniData[sectionName].GetKeyData("FULL_ID").Value;
+            cfg.Name = iniData[sectionName].GetKeyData("NAME").Value;
+            cfg.Tv = GetTvFromString(iniData[sectionName].GetKeyData("TV").Value);
+            cfg.Cic = GetCicFromString(iniData[sectionName].GetKeyData("CIC").Value);
+            cfg.Save = GetSaveFromString(iniData[sectionName].GetKeyData("SAVE").Value);
+            cfg.SaveOffset = byte.Parse(iniData[sectionName].GetKeyData("SAVE_OFFSET").Value);
+            cfg.RomSize = int.Parse(iniData[sectionName].GetKeyData("ROM_SIZE").Value);
+            cfg.RomCrc = uint.Parse(iniData[sectionName].GetKeyData("ROM_CRC").Value);
+
+            // Flash partitions must be assigned externally
+
+            return cfg;
         }
     }
 }
