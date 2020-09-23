@@ -111,20 +111,6 @@ namespace Brutzler
             BrutzelConfig config = GetRomConfig(fileName);
             if (config != null)
             {
-                int partitionCount = (int)Math.Ceiling((double)config.RomSize / RomPartitionSize);
-                int saveSize = GetSaveSize(config.Save);
-
-                if (_FlashManager.FreePartitionCount < partitionCount)
-                    throw new Exception("Not enough Flash");
-                if (_SaveRamManager.BytesFree < saveSize)
-                    throw new Exception("Not enough save RAM");
-
-                config.FlashPartitions = _FlashManager.GetPartitions(partitionCount);
-                if (saveSize > 0)
-                {
-                    config.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
-                }
-
                 RomListViewItem item = new RomListViewItem(config)
                 {
                     FileName = fileName
@@ -135,10 +121,15 @@ namespace Brutzler
 
         void RemoveRom(RomListViewItem item)
         {
-            _FlashManager.ReturnPartitions(item.Config.FlashPartitions);
-            if (GetSaveSize(item.Save) > 0)
+            // Return memory if reserved
+            if (item.Config.FlashPartitions != null)
             {
-                _SaveRamManager.Return((int)item.SaveOffset * SaveRamFragmentSize);
+                _FlashManager.ReturnPartitions(item.Config.FlashPartitions);
+                item.Config.FlashPartitions = null;
+                if (GetSaveSize(item.Save) > 0)
+                {
+                    _SaveRamManager.Return((int)item.SaveOffset * SaveRamFragmentSize);
+                }
             }
             RomList.Remove(item);
         }
@@ -345,8 +336,15 @@ namespace Brutzler
 
         void UpdateOffsets()
         {
-            FlashLevel = _FlashManager.UsedPartitionCount * 2;
-            SramLevel = (SaveRamSize - _SaveRamManager.BytesFree) / 1024;
+            int flashLevel = 0;
+            int saveLevel = 0;
+            for (int i = 0; i < RomList.Count; i++)
+            {
+                flashLevel += (byte)Math.Ceiling((float)RomList[i].Size / 1024 / 1024);
+                saveLevel += (byte)Math.Ceiling((float)GetSaveSize(RomList[i].Save) / 1024);
+            }
+            FlashLevel = flashLevel;
+            SramLevel = saveLevel;
         }
 
         int GetSaveSize(SaveType save)
@@ -584,6 +582,7 @@ namespace Brutzler
         private void MenuItem_AddRom_Click(object sender, RoutedEventArgs e)
         {
             AddRomDialog();
+            UpdateOffsets();
         }
 
         private void MenuItem_Delete_Click(object sender, RoutedEventArgs e)
@@ -877,6 +876,14 @@ namespace Brutzler
                     
                 }
                 config.FlashPartitions = partitionList.ToArray();
+
+                // Allocate SaveMem if needed
+                int saveSize = GetSaveSize(config.Save);
+                if (saveSize > 0)
+                {
+                    _SaveRamManager.AllocAt(config.SaveOffset * SaveRamFragmentSize, saveSize);
+                }
+
                 RomListViewItem item = new RomListViewItem(config);
                 item.IsFlashed = true;
                 RomList.Add(item);
@@ -1066,22 +1073,28 @@ namespace Brutzler
                 int sectorsDeleted = 1;
                 foreach (var item in RomList)
                 {
-                    foreach (var partition in item.Config.FlashPartitions)
+                    if (item.IsFlashed == false)
                     {
-                        if (partition.Dirty)
+                        if (item.Config.FlashPartitions == null)
                         {
-                            sectorsToDelete += RomPartitionSize / RomSectorSize;
+                            int partitionCount = (int)Math.Ceiling((double)item.Size / RomPartitionSize);
+                            item.Config.FlashPartitions = _FlashManager.GetPartitions(partitionCount);
+                            int saveSize = GetSaveSize(item.Save);
+                            if (saveSize > 0)
+                            {
+                                item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
+                            }
                         }
+                        sectorsToDelete += item.Config.FlashPartitions.Length * RomPartitionSize / RomSectorSize;
                     }
                 }
 
                 // Erase Flash all partitions
-                for (int itemIndex = 0; itemIndex < RomList.Count; itemIndex++)
+                foreach (var item in RomList)
                 {
-                    var item = RomList[itemIndex];
-                    foreach (var partition in item.Config.FlashPartitions)
+                    if (item.IsFlashed == false)
                     {
-                        if (partition.Dirty)
+                        foreach (var partition in item.Config.FlashPartitions)
                         {
                             int bytesToDelete = RomPartitionSize;
                             int addr = RomPartitionSize * partition.Offset;
@@ -1106,7 +1119,7 @@ namespace Brutzler
 
 
                 // Write the roms
-                foreach (RomListViewItem item in RomList)
+                foreach (var item in RomList)
                 {
                     ct.ThrowIfCancellationRequested();
 
@@ -1150,13 +1163,10 @@ namespace Brutzler
                             addr = item.Config.FlashPartitions[partitionIndex].Offset * RomPartitionSize;
                         }
 
-                        if (item.Config.FlashPartitions[partitionIndex].Dirty)
+                        cart.WritePage(addr, dataPage);
+                        if (cart.PendingAck > MaxPendingAck)
                         {
-                            cart.WritePage(addr, dataPage);
-                            if (cart.PendingAck > MaxPendingAck)
-                            {
-                                cart.WaitAck();
-                            }
+                            cart.WaitAck();
                         }
 
                         bytesLeftInPartition -= dataPage.Length;
