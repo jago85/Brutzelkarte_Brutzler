@@ -871,7 +871,6 @@ namespace Brutzler
                     string mappingKey = "MAPPING" + i.ToString();
                     byte mapping = byte.Parse(iniDat[sectionName].GetKeyData(mappingKey).Value);
                     FlashPartition partition = _FlashManager.GetPartition(mapping);
-                    partition.Dirty = false;
                     partitionList.Add(partition);
                     
                 }
@@ -1170,11 +1169,6 @@ namespace Brutzler
                         }
 
                         bytesLeftInPartition -= dataPage.Length;
-
-                        if (bytesLeftInPartition == 0)
-                        {
-                            item.Config.FlashPartitions[partitionIndex].Dirty = false;
-                        }
 
                         addr += dataPage.Length;
                         pagesWritten++;
@@ -1983,13 +1977,11 @@ namespace Brutzler
     {
         public byte Offset { get; set; }
 
-        public bool Dirty { get; set; }
-
         public bool Used { get; set; }
 
         public override string ToString()
         {
-            return string.Format("Offset: {0}, Dirty: {1}, Used: {2}", Offset, Dirty, Used);
+            return string.Format("Offset: {0}, Used: {1}", Offset, Used);
         }
     }
 
@@ -2004,7 +1996,6 @@ namespace Brutzler
             for (int i = 0; i < partitionCount; i++)
             {
                 FlashPartition item = new FlashPartition();
-                item.Dirty = true;
                 item.Used = false;
                 item.Offset = (byte)(i);
                 _FlashList.Add(item);
@@ -2080,7 +2071,6 @@ namespace Brutzler
                 throw new InvalidOperationException("Partition is not in use");
 
             _FlashList[index].Used = false;
-            _FlashList[index].Dirty = true;
         }
 
         public void ReturnPartition(FlashPartition partition)
