@@ -28,6 +28,7 @@ using IniParser.Model;
 using System.Net;
 using IniParser.Parser;
 using System.CodeDom;
+using System.Windows.Shell;
 
 namespace Brutzler
 {
@@ -146,11 +147,23 @@ namespace Brutzler
                 return;
             }
 
+            // Deallocate the SRAM if the Save Type has changed
+            if ((item.IsSaveRamAllocated) && (item.Save != wnd.SelectedSave))
+            {
+                MessageBoxResult result = MessageBox.Show("This will clear the Save memory for this game!\r\n\r\nAre you sure?", "Save will be lost", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
+                if (result != MessageBoxResult.OK)
+                {
+                    return;
+                }
+                _SaveRamManager.Return(item.SaveOffset * SaveRamFragmentSize);
+                item.IsSaveRamAllocated = false;
+            }
+
             item.Name = wnd.SelectedGameName;
             item.Cic = wnd.SelectedCic;
             item.Tv = wnd.SelectedTv;
             item.Save = wnd.SelectedSave;
-#warning TODO: SaveRam could have changed here
+
             UpdateOffsets();
         }
 
@@ -680,8 +693,19 @@ namespace Brutzler
         {
             MenuItem menu = sender as MenuItem;
             RomListViewItem item = menu.DataContext as RomListViewItem;
+
             if (item.Save == SaveType.None)
+            {
+                MessageBox.Show("This ROM does not have Save RAM ", "No Save RAM", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
+            }
+
+            if (item.IsSaveRamAllocated == false)
+            {
+                MessageBox.Show("This ROM does not have Save RAM allocated.\r\nPlease FLASH the ROM first.", "Save RAM not allocated", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             string msgText = String.Format("This clears the savegame memory for:\r\n\r\n    {0}\r\n\r\nAre you sure?", item.Name);
             MessageBoxResult result = MessageBox.Show(msgText, "Erase Savegame", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
             if (result == MessageBoxResult.OK)
@@ -703,8 +727,19 @@ namespace Brutzler
         {
             MenuItem menu = sender as MenuItem;
             RomListViewItem item = menu.DataContext as RomListViewItem;
+
             if (item.Save == SaveType.None)
+            {
+                MessageBox.Show("This ROM does not have Save RAM ", "No Save RAM", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
+            }
+
+            if (item.IsSaveRamAllocated == false)
+            {
+                MessageBox.Show("This ROM does not have Save RAM allocated.\r\nPlease FLASH the ROM first.", "Save RAM not allocated", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             OpenFileDialog d = new OpenFileDialog();
             d.Filter = String.Format("savegame file (*.{0})|*.{0}|all files|*.*", GetSaveExtension(item.Save));
             if (d.ShowDialog().Value == true)
@@ -720,8 +755,19 @@ namespace Brutzler
         {
             MenuItem menu = sender as MenuItem;
             RomListViewItem item = menu.DataContext as RomListViewItem;
+
             if (item.Save == SaveType.None)
+            {
+                MessageBox.Show("This ROM does not have Save RAM ", "No Save RAM", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
+            }
+
+            if (item.IsSaveRamAllocated == false)
+            {
+                MessageBox.Show("This ROM does not have Save RAM allocated.\r\nPlease FLASH the ROM first.", "Save RAM not allocated", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
             SaveFileDialog d = new SaveFileDialog();
             d.Filter = String.Format("savegame file (*.{0})|*.{0}|all files|*.*", GetSaveExtension(item.Save));
             if (d.ShowDialog().Value == true)
@@ -876,14 +922,15 @@ namespace Brutzler
                 }
                 config.FlashPartitions = partitionList.ToArray();
 
+                RomListViewItem item = new RomListViewItem(config);
                 // Allocate SaveMem if needed
                 int saveSize = GetSaveSize(config.Save);
                 if (saveSize > 0)
                 {
                     _SaveRamManager.AllocAt(config.SaveOffset * SaveRamFragmentSize, saveSize);
+                    item.IsSaveRamAllocated = true;
                 }
 
-                RomListViewItem item = new RomListViewItem(config);
                 item.IsFlashed = true;
                 RomList.Add(item);
             }
@@ -1075,35 +1122,46 @@ namespace Brutzler
                     if (item.IsFlashed)
                         continue;
 
-                    // if FlashPartitions is null, grab free memory (flash and SRAM if needed) from the managers
+                    // if FlashPartitions is null, grab free memory from the manager
                     if (item.Config.FlashPartitions == null)
                     {
                         int partitionCount = (int)Math.Ceiling((double)item.Size / RomPartitionSize);
                         item.Config.FlashPartitions = _FlashManager.GetPartitions(partitionCount);
-                        int saveSize = GetSaveSize(item.Save);
-                        if (saveSize > 0)
-                        {
-                            try
-                            {
-                                item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
-                            }
-                            catch (SaveRamFragmentedException)
-                            {
-                                // SaveRam must be defragmented
-                                DefragSaveRam(cart, progress, ct);
-
-                                // Alloc should now be possible
-                                item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
-                            }
-                        }
                     }
                     sectorsToDelete += item.Config.FlashPartitions.Length * RomPartitionSize / RomSectorSize;
                 }
 
+                // Assign the Save RAM from the manager
+                foreach (var item in RomList)
+                {
+                    if (item.IsSaveRamAllocated)
+                        continue;
+
+                    int saveSize = GetSaveSize(item.Save);
+                    if (saveSize > 0)
+                    {
+                        try
+                        {
+                            item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
+                        }
+                        catch (SaveRamFragmentedException)
+                        {
+                            // SaveRam must be defragmented
+                            DefragSaveRam(cart, progress, ct);
+
+                            // Alloc should now be possible
+                            item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
+                        }
+                        item.IsSaveRamAllocated = true;
+                    }
+                }
+
+                ct.ThrowIfCancellationRequested();
+
                 // Erase Flash all partitions
                 foreach (var item in RomList)
                 {
-                    if (item.IsFlashed == false)
+                    if (item.IsFlashed)
                         continue;
 
                     foreach (var partition in item.Config.FlashPartitions)
@@ -1134,7 +1192,7 @@ namespace Brutzler
                 {
                     ct.ThrowIfCancellationRequested();
 
-                    if (item.IsFlashed == true)
+                    if (item.IsFlashed)
                         continue;
 
                     FileInfo fileInfo = new FileInfo(item.FileName);
@@ -1287,7 +1345,8 @@ namespace Brutzler
             byte[] pageBuffer = new byte[256];
             while (ms.Position < SaveRamSize)
             {
-                ct.ThrowIfCancellationRequested();
+                // Don't allow interrupting the write back process
+                //ct.ThrowIfCancellationRequested();
 
                 ms.Read(pageBuffer, 0, pageBuffer.Length);
                 cart.WriteSram((int)ms.Position, pageBuffer);
@@ -1938,6 +1997,20 @@ namespace Brutzler
                 {
                     _IsFlashed = value;
                     OnPropertyChanged("IsFlashed");
+                }
+            }
+        }
+
+        private bool _IsSaveRamAllocated;
+        public bool IsSaveRamAllocated
+        {
+            get => _IsSaveRamAllocated;
+            set
+            {
+                if (value != _IsSaveRamAllocated)
+                {
+                    _IsSaveRamAllocated = value;
+                    OnPropertyChanged("IsSaveRamAllocated");
                 }
             }
         }
