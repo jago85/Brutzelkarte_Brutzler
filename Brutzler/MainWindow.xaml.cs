@@ -150,7 +150,7 @@ namespace Brutzler
             item.Cic = wnd.SelectedCic;
             item.Tv = wnd.SelectedTv;
             item.Save = wnd.SelectedSave;
-
+#warning TODO: SaveRam could have changed here
             UpdateOffsets();
         }
 
@@ -1074,6 +1074,7 @@ namespace Brutzler
                 {
                     if (item.IsFlashed == false)
                     {
+                        // if FlashPartitions is null, grab free memory (flash and SRAM if needed) from the managers
                         if (item.Config.FlashPartitions == null)
                         {
                             int partitionCount = (int)Math.Ceiling((double)item.Size / RomPartitionSize);
@@ -1081,7 +1082,18 @@ namespace Brutzler
                             int saveSize = GetSaveSize(item.Save);
                             if (saveSize > 0)
                             {
-                                item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
+                                try
+                                {
+                                    item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
+                                }
+                                catch (SaveRamFragmentedException)
+                                {
+                                    // SaveRam must be defragmented
+                                    DefragSaveRam(cart, progress, ct);
+
+                                    // Alloc should now be possible
+                                    item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
+                                }
                             }
                         }
                         sectorsToDelete += item.Config.FlashPartitions.Length * RomPartitionSize / RomSectorSize;
@@ -1195,7 +1207,8 @@ namespace Brutzler
                     int erasedBytes = 0;
                     while (erasedBytes < ms.Length)
                     {
-                        ct.ThrowIfCancellationRequested();
+                        // Don't want to break the config
+                        //ct.ThrowIfCancellationRequested();
 
                         cart.EraseSector(addr);
                         cart.WaitAck();
@@ -1207,7 +1220,8 @@ namespace Brutzler
                     addr = BootMemoryOffset + DfsOffset;
                     while (ms.Position < ms.Length)
                     {
-                        ct.ThrowIfCancellationRequested();
+                        // Don't want to break the config
+                        //ct.ThrowIfCancellationRequested();
 
                         byte[] pageData = new byte[256];
                         ms.Read(pageData, 0, pageData.Length);
@@ -1215,6 +1229,11 @@ namespace Brutzler
                         cart.WritePage(addr, pageData);
                         cart.WaitAck();
                         addr += pageData.Length;
+                    }
+
+                    foreach (RomListViewItem item in RomList)
+                    {
+                        item.IsFlashed = true;
                     }
                 }
             }
@@ -1228,12 +1247,63 @@ namespace Brutzler
             {
                 cart.Close();
             }
+        }
 
-            foreach (RomListViewItem item in RomList)
+        void DefragSaveRam(Brutzelkarte cart, IProgress<ProgressWindowInfo> progress, CancellationToken ct)
+        {
+            ProgressWindowInfo info = new ProgressWindowInfo();
+            info.ActionText = "Defragmenting SRAM (Read)";
+            progress.Report(info);
+
+            // Read the SRAM
+            int pageCnt = SaveRamSize / 256;
+            byte[] readBuffer = new byte[pageCnt * 256];
+
+            cart.SendAddr(0);
+            for (int i = 0; i < pageCnt; i++)
             {
-                item.IsFlashed = true;
+                ct.ThrowIfCancellationRequested();
+
+                byte[] page = cart.ReadSramPage();
+                page.CopyTo(readBuffer, i * 256);
+                info.ActionText = String.Format("Defragmenting SRAM (Read) {0} / {1} KiB", (i + 1) * 256 / 1024, SaveRamSize / 1024);
+                info.ProgressPercent = i * 100 / pageCnt;
+                progress.Report(info);
             }
 
+            // Defrag
+            byte[] writeBuffer = new byte[readBuffer.Length];
+            readBuffer.CopyTo(writeBuffer, 0);
+            _SaveRamManager.DefragmentMem((item, newOffset) => {
+                Array.Copy(readBuffer, item.Offset, writeBuffer, newOffset, item.Size);
+            });
+
+            // Write back
+            info.ActionText = "Defragmenting SRAM (Write)";
+            info.ProgressPercent = 0;
+            progress.Report(info);
+
+            MemoryStream ms = new MemoryStream(writeBuffer);
+            byte[] pageBuffer = new byte[256];
+            while (ms.Position < SaveRamSize)
+            {
+                ct.ThrowIfCancellationRequested();
+
+                ms.Read(pageBuffer, 0, pageBuffer.Length);
+                cart.WriteSram((int)ms.Position, pageBuffer);
+                if (cart.PendingAck > MaxPendingAck)
+                {
+                    cart.WaitAck();
+                }
+
+                info.ActionText = String.Format("Defragmenting SRAM (Write) {0} / {1} KiB", ms.Position / 1024, SaveRamSize / 1024);
+                info.ProgressPercent = (int)(ms.Position * 100 / SaveRamSize);
+                progress.Report(info);
+            }
+            while (cart.PendingAck > 0)
+            {
+                cart.WaitAck();
+            }
         }
 
         void Action_UpdateBootloader(IProgress<ProgressWindowInfo> progress, CancellationToken ct, object argument)
