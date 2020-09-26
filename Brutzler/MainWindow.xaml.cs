@@ -1072,58 +1072,58 @@ namespace Brutzler
                 int sectorsDeleted = 1;
                 foreach (var item in RomList)
                 {
-                    if (item.IsFlashed == false)
-                    {
-                        // if FlashPartitions is null, grab free memory (flash and SRAM if needed) from the managers
-                        if (item.Config.FlashPartitions == null)
-                        {
-                            int partitionCount = (int)Math.Ceiling((double)item.Size / RomPartitionSize);
-                            item.Config.FlashPartitions = _FlashManager.GetPartitions(partitionCount);
-                            int saveSize = GetSaveSize(item.Save);
-                            if (saveSize > 0)
-                            {
-                                try
-                                {
-                                    item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
-                                }
-                                catch (SaveRamFragmentedException)
-                                {
-                                    // SaveRam must be defragmented
-                                    DefragSaveRam(cart, progress, ct);
+                    if (item.IsFlashed)
+                        continue;
 
-                                    // Alloc should now be possible
-                                    item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
-                                }
+                    // if FlashPartitions is null, grab free memory (flash and SRAM if needed) from the managers
+                    if (item.Config.FlashPartitions == null)
+                    {
+                        int partitionCount = (int)Math.Ceiling((double)item.Size / RomPartitionSize);
+                        item.Config.FlashPartitions = _FlashManager.GetPartitions(partitionCount);
+                        int saveSize = GetSaveSize(item.Save);
+                        if (saveSize > 0)
+                        {
+                            try
+                            {
+                                item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
+                            }
+                            catch (SaveRamFragmentedException)
+                            {
+                                // SaveRam must be defragmented
+                                DefragSaveRam(cart, progress, ct);
+
+                                // Alloc should now be possible
+                                item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
                             }
                         }
-                        sectorsToDelete += item.Config.FlashPartitions.Length * RomPartitionSize / RomSectorSize;
                     }
+                    sectorsToDelete += item.Config.FlashPartitions.Length * RomPartitionSize / RomSectorSize;
                 }
 
                 // Erase Flash all partitions
                 foreach (var item in RomList)
                 {
                     if (item.IsFlashed == false)
+                        continue;
+
+                    foreach (var partition in item.Config.FlashPartitions)
                     {
-                        foreach (var partition in item.Config.FlashPartitions)
+                        int bytesToDelete = RomPartitionSize;
+                        int addr = RomPartitionSize * partition.Offset;
+
+                        while (bytesToDelete > 0)
                         {
-                            int bytesToDelete = RomPartitionSize;
-                            int addr = RomPartitionSize * partition.Offset;
+                            ct.ThrowIfCancellationRequested();
+                            info.ActionText = String.Format("Erasing {0} / {1}", sectorsDeleted, sectorsToDelete);
+                            info.ProgressPercent = 100 * (sectorsDeleted) / sectorsToDelete;
+                            progress.Report(info);
 
-                            while (bytesToDelete > 0)
-                            {
-                                ct.ThrowIfCancellationRequested();
-                                info.ActionText = String.Format("Erasing {0} / {1}", sectorsDeleted, sectorsToDelete);
-                                info.ProgressPercent = 100 * (sectorsDeleted) / sectorsToDelete;
-                                progress.Report(info);
+                            cart.EraseSector(addr);
+                            cart.WaitAck();
 
-                                cart.EraseSector(addr);
-                                cart.WaitAck();
-
-                                addr += RomSectorSize;
-                                bytesToDelete -= RomSectorSize;
-                                sectorsDeleted++;
-                            }
+                            addr += RomSectorSize;
+                            bytesToDelete -= RomSectorSize;
+                            sectorsDeleted++;
                         }
                     }
                 }
