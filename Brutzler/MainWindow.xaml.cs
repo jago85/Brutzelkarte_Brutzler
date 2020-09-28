@@ -1118,7 +1118,6 @@ namespace Brutzler
 
                 // get total sectors-to-delete count
                 int sectorsToDelete = 0;
-                int sectorsDeleted = 1;
                 foreach (var item in RomList)
                 {
                     if (item.IsFlashed)
@@ -1154,7 +1153,29 @@ namespace Brutzler
                             // Alloc should now be possible
                             item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
                         }
-#warning TODO: Clear newly allocated SRAM
+
+                        info.ActionText = "Clear Save";
+                        progress.Report(info);
+
+                        // Clear the SaveRam
+                        int addr = item.SaveOffset * SaveRamFragmentSize;
+                        byte[] sramClearData = Enumerable.Repeat((byte)((item.Save == SaveType.FlashRam) ? 0xFF : 0x00), 256).ToArray();
+                        for (int i = 0; i < saveSize / sramClearData.Length; i++)
+                        {
+                            cart.WriteSram(addr, sramClearData);
+                            if (cart.PendingAck > MaxPendingAck)
+                            {
+                                cart.WaitAck();
+                            }
+                            info.ProgressPercent = 100 * (i + 1) * sramClearData.Length / saveSize;
+                            addr += sramClearData.Length;
+                        }
+                        while (cart.PendingAck > 0)
+                        {
+                            cart.WaitAck();
+                        }
+
+                        // SaveRam is now allocated
                         item.IsSaveRamAllocated = true;
                     }
                 }
@@ -1162,6 +1183,7 @@ namespace Brutzler
                 ct.ThrowIfCancellationRequested();
 
                 // Erase Flash all partitions
+                int sectorsDeleted = 1;
                 foreach (var item in RomList)
                 {
                     if (item.IsFlashed)
@@ -1336,6 +1358,11 @@ namespace Brutzler
             byte[] writeBuffer = new byte[readBuffer.Length];
             readBuffer.CopyTo(writeBuffer, 0);
             _SaveRamManager.DefragmentMem((item, newOffset) => {
+                // Find the RomList-Item with this SaveOffset and change it to the new offset
+                var listItem = RomList.Where(x => (x.IsSaveRamAllocated && (x.SaveOffset == (item.Offset / SaveRamFragmentSize)))).First();
+                listItem.SaveOffset = (byte)(newOffset / SaveRamFragmentSize);
+
+                // Copy the SRAM buffer to the new buffer
                 Array.Copy(readBuffer, item.Offset, writeBuffer, newOffset, item.Size);
             });
 
