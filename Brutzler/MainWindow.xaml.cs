@@ -127,10 +127,10 @@ namespace Brutzler
             {
                 _FlashManager.ReturnPartitions(item.Config.FlashPartitions);
                 item.Config.FlashPartitions = null;
-                if (GetSaveSize(item.Save) > 0)
-                {
-                    _SaveRamManager.Return((int)item.SaveOffset * SaveRamFragmentSize);
-                }
+            }
+            if (item.IsSaveRamAllocated)
+            {
+                _SaveRamManager.Return((int)item.SaveOffset * SaveRamFragmentSize);
             }
             RomList.Remove(item);
         }
@@ -716,7 +716,9 @@ namespace Brutzler
                 arg.DataList = new List<byte[]>();
                 while (size > 0)
                 {
-                    arg.DataList.Add(new byte[256]);
+                    // Clear FRAM to 0xff, all others to 0x00
+                    byte[] clearData = Enumerable.Repeat((byte)((item.Save == SaveType.FlashRam) ? 0xFF : 0x00), 256).ToArray();
+                    arg.DataList.Add(clearData);
                     size -= Math.Min(size, 256);
                 }
                 RunTaskInProgressWindow("Clear Save", Action_WriteSramData, arg);
@@ -1152,6 +1154,7 @@ namespace Brutzler
                             // Alloc should now be possible
                             item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
                         }
+#warning TODO: Clear newly allocated SRAM
                         item.IsSaveRamAllocated = true;
                     }
                 }
@@ -1242,7 +1245,7 @@ namespace Brutzler
 
                         addr += dataPage.Length;
                         pagesWritten++;
-                        info.ActionText = String.Format("Writing {0}", item.Name);
+                        info.ActionText = String.Format("Writing {0} {1} / {2} KB", item.Name, pagesWritten * 256 / 1024, pageList.Count * 256 / 1024);
                         info.ProgressPercent = 100 * pagesWritten / pageList.Count;
                         progress.Report(info);
                     }
