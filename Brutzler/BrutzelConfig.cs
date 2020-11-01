@@ -168,7 +168,7 @@ namespace BrutzelProg
             iniData[sectionName].AddKey("SAVE", GetSaveString());
             iniData[sectionName].AddKey("SAVE_OFFSET", SaveOffset.ToString());
             iniData[sectionName].AddKey("ROM_SIZE", RomSize.ToString());
-            iniData[sectionName].AddKey("ROM_CRC", RomCrc.ToString());
+            iniData[sectionName].AddKey("ROM_CRC", RomCrc.ToString("X08"));
 
             for (int i = 0; i < 32; i++)
             {
