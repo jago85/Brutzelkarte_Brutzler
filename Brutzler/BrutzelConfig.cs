@@ -192,7 +192,7 @@ namespace BrutzelProg
             cfg.Save = GetSaveFromString(iniData[sectionName].GetKeyData("SAVE").Value);
             cfg.SaveOffset = byte.Parse(iniData[sectionName].GetKeyData("SAVE_OFFSET").Value);
             cfg.RomSize = int.Parse(iniData[sectionName].GetKeyData("ROM_SIZE").Value);
-            cfg.RomCrc = uint.Parse(iniData[sectionName].GetKeyData("ROM_CRC").Value);
+            cfg.RomCrc = uint.Parse(iniData[sectionName].GetKeyData("ROM_CRC").Value, System.Globalization.NumberStyles.HexNumber);
 
             // Flash partitions must be assigned externally
 
