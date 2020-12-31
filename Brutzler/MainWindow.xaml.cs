@@ -54,6 +54,8 @@ namespace Brutzler
         {
             InitializeComponent();
 
+            Title = "BRUTZLER v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
+
             RomList = new ObservableCollection<RomListViewItem>();
             RomList.CollectionChanged += RomList_CollectionChanged;
             DataContext = this;
@@ -802,6 +804,22 @@ namespace Brutzler
             }
         }
 
+        private void MenuItem_AboutClick(object sender, RoutedEventArgs e)
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            var info = asm.GetName();
+            string copyright = "";
+            foreach (var attr in asm.GetCustomAttributes(false))
+            {
+                if (attr.GetType() == typeof(System.Reflection.AssemblyCopyrightAttribute))
+                {
+                    copyright = ((System.Reflection.AssemblyCopyrightAttribute)attr).Copyright;
+                }
+            }
+            string text = String.Format("{0} v{1}\r\n{2}", info.Name, info.Version.ToString(3), copyright);
+            MessageBox.Show(text, "About", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
         #endregion
 
         #region Buttons
@@ -1480,6 +1498,7 @@ namespace Brutzler
         }
 
         #endregion
+
     }
 
     public class RomListViewItem : INotifyPropertyChanged

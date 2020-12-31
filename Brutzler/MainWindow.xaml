@@ -77,7 +77,7 @@
                 <MenuItem Header="Set RTC" Click="MenuItem_SetRtc_Click"/>
             </MenuItem>
             <MenuItem Header="?">
-                <MenuItem Header="About"  IsEnabled="False"/>
+                <MenuItem Header="About" Click="MenuItem_AboutClick"/>
             </MenuItem>
         </Menu>
         <Grid>
