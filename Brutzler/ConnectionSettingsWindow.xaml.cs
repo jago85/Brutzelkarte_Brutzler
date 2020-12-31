@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using System.IO.Ports;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
@@ -13,6 +12,8 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using FTD2XX_NET;
+using static FTD2XX_NET.FTDI;
 
 namespace Brutzler
 {
@@ -21,6 +22,8 @@ namespace Brutzler
     /// </summary>
     public partial class ConnectionSettingsWindow : Window, INotifyPropertyChanged
     {
+        FT_DEVICE_INFO_NODE[] _Devices;
+
         public ConnectionSettingsWindow()
         {
             InitializeComponent();
@@ -30,7 +33,18 @@ namespace Brutzler
 
         void UpdatePorts()
         {
-            PortNames = SerialPort.GetPortNames();
+            FTDI ftdi = new FTDI();
+            FT_STATUS status;
+            uint numDevices = 0;
+            status = ftdi.GetNumberOfDevices(ref numDevices);
+            string[] names = new string[numDevices];
+            _Devices = new FT_DEVICE_INFO_NODE[numDevices];
+            ftdi.GetDeviceList(_Devices);
+            for (int i = 0; i < numDevices; i++)
+            {
+                names[i] = String.Format("{0} ({1})", _Devices[i].SerialNumber, _Devices[i].Description);
+            }
+            PortNames = names;
         }
 
         string[] _PortNames;
@@ -46,6 +60,8 @@ namespace Brutzler
 
         public string SelectedPort { get; set; }
 
+        public int SelectedIndex { get; set; }
+
         public event PropertyChangedEventHandler PropertyChanged;
 
         void OnPropertyChanged(string propertyName)
@@ -60,6 +76,15 @@ namespace Brutzler
 
         private void Button_Ok_Click(object sender, RoutedEventArgs e)
         {
+            if (SelectedIndex >= 0)
+            {
+                SelectedPort = _Devices[SelectedIndex].SerialNumber;
+            }
+            else
+            {
+                SelectedPort = "";
+            }
+
             DialogResult = true;
         }
     }

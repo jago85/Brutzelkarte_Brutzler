@@ -1,31 +1,47 @@
 ﻿using StxEtx;
 using System;
 using System.Collections.Generic;
-using System.IO.Ports;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using FTD2XX_NET;
+using static FTD2XX_NET.FTDI;
 
 namespace BrutzelProg
 {
     public class Brutzelkarte
     {
-        SerialPort _ComPort;
+        FTDI _Ftdi;
+        string _PortName = "";
         int _PendingAck = 0;
         StxEtxParser _AckParser = new StxEtxParser();
+        EventWaitHandle _WaitHandle = new EventWaitHandle(false, EventResetMode.AutoReset);
 
         public Brutzelkarte(string portName)
         {
-            _ComPort = new SerialPort(portName, 3000000, Parity.None, 8, StopBits.One);
-            _ComPort.Handshake = Handshake.RequestToSend;
-            _ComPort.RtsEnable = true;
+            _PortName = portName;
+            _Ftdi = new FTDI();
         }
 
         public void Open()
         {
             Console.WriteLine("Open Port");
-            _ComPort.Open();
+            FT_STATUS status;
+
+            status = _Ftdi.OpenBySerialNumber(_PortName);
+            if (status == FT_STATUS.FT_OK)
+                status = _Ftdi.SetLatency(4);
+            if (status == FT_STATUS.FT_OK)
+                status = _Ftdi.SetBaudRate(3000000);
+            if (status == FT_STATUS.FT_OK)
+                status = _Ftdi.InTransferSize(64);
+            if (status == FT_STATUS.FT_OK)
+                status = _Ftdi.SetTimeouts(1, 0);
+            if (status == FT_STATUS.FT_OK)
+                status = _Ftdi.SetEventNotification(FT_EVENTS.FT_EVENT_RXCHAR, _WaitHandle);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error opening device " + _PortName);
         }
 
         public void Close()
@@ -34,10 +50,40 @@ namespace BrutzelProg
             // don't throw any exception
             try
             {
-                _ComPort.Close();
+                _Ftdi.Close();
             }
             catch (Exception)
             { }
+        }
+
+        private byte[] ReceiveResponse()
+        {
+            byte[] result = null;
+            StxEtxParser parser = new StxEtxParser();
+
+            parser.PacketComplete += new StxEtxParser.PacketCompleteHandler((par, data) => {
+                result = data;
+            });
+
+            while (result == null)
+            {
+                if (_WaitHandle.WaitOne(1000) == false)
+                    throw new Exception("Error reading data (ReceiveResponse)");
+
+                uint rxBytes = 0;
+                _Ftdi.GetRxBytesAvailable(ref rxBytes);
+                if (rxBytes > 0)
+                {
+                    byte[] readBuffer = new byte[rxBytes];
+                    uint readBytes = 0;
+                    FT_STATUS status = _Ftdi.Read(readBuffer, (uint)readBuffer.Length, ref readBytes);
+                    if (status != FT_STATUS.FT_OK)
+                        throw new Exception("Error reading data (ReceiveResponse)");
+                    parser.Parse(readBuffer, 0, (int)readBytes);
+                }
+            }
+
+            return result;
         }
 
         private void WriteIntBe(StxEtxMemoryStream stream, int value)
@@ -59,7 +105,12 @@ namespace BrutzelProg
             stream.EndPacket();
             
             byte[] bytes = stream.GetBytes();
-            _ComPort.Write(bytes, 0, bytes.Length);
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (SendAddr)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (SendAddr)");
         }
 
         public void EraseSector(int sectorAddr)
@@ -80,7 +131,12 @@ namespace BrutzelProg
             stream.EndPacket();
 
             byte[] bytes = stream.GetBytes();
-            _ComPort.Write(bytes, 0, bytes.Length);
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (EraseSector)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (EraseSector)");
             _PendingAck++;
         }
 
@@ -106,7 +162,12 @@ namespace BrutzelProg
             stream.EndPacket();
 
             byte[] bytes = stream.GetBytes();
-            _ComPort.Write(bytes, 0, bytes.Length);
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (WritePage)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (WritePage)");
             _PendingAck++;
         }
 
@@ -130,7 +191,12 @@ namespace BrutzelProg
             stream.EndPacket();
 
             byte[] bytes = stream.GetBytes();
-            _ComPort.Write(bytes, 0, bytes.Length);
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (WriteSram)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (WriteSram)");
             _PendingAck++;
         }
 
@@ -162,7 +228,12 @@ namespace BrutzelProg
             stream.WriteByte(ConvertToBcd((rtcTime.Year - 2000)));
             stream.EndPacket();
             byte[] bytes = stream.GetBytes();
-            _ComPort.Write(bytes, 0, bytes.Length);
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (SetRtc)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (SetRtc)");
         }
 
         public bool WaitAck()
@@ -181,8 +252,11 @@ namespace BrutzelProg
             byte[] buffer = new byte[64];
             while (receivedData == false)
             {
-                int len = _ComPort.Read(buffer, 0, buffer.Length);
-                _AckParser.Parse(buffer, 0, len);
+                uint len = 0;
+                FT_STATUS status = _Ftdi.Read(buffer, (uint)buffer.Length, ref len);
+                if (status != FT_STATUS.FT_OK)
+                    throw new Exception("Error reading data (WaitAck)");
+                _AckParser.Parse(buffer, 0, (int)len);
             }
 
             _AckParser.PacketComplete -= handler;
@@ -198,50 +272,34 @@ namespace BrutzelProg
 
             StxEtxPacket packet = new StxEtxPacket(cmdData);
             byte[] bytes = packet.GetBytes();
-            _ComPort.Write(bytes, 0, bytes.Length);
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (ReadFlashPage)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (ReadFlashPage)");
 
-            byte[] result = null;
-            StxEtxParser parser = new StxEtxParser();
-
-            parser.PacketComplete += new StxEtxParser.PacketCompleteHandler((par, data) => {
-                result = data;
-            });
-
-            byte[] readBuffer = new byte[512];
-            while (result == null)
-            {
-                int readBytes = _ComPort.Read(readBuffer, 0, readBuffer.Length);
-                parser.Parse(readBuffer, 0, readBytes);
-            }
-
-            return result;
+            return ReceiveResponse();
         }
 
         public byte[] ReadSramPage()
         {
+            Console.WriteLine("ReadSramPage");
+
             byte[] cmdData = new byte[] {
                 0x06
             };
 
             StxEtxPacket packet = new StxEtxPacket(cmdData);
             byte[] bytes = packet.GetBytes();
-            _ComPort.Write(bytes, 0, bytes.Length);
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (ReadSramPage)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (ReadSramPage)");
 
-            byte[] result = null;
-            StxEtxParser parser = new StxEtxParser();
-
-            parser.PacketComplete += new StxEtxParser.PacketCompleteHandler((par, data) => {
-                result = data;
-            });
-
-            byte[] readBuffer = new byte[512];
-            while (result == null)
-            {
-                int readBytes = _ComPort.Read(readBuffer, 0, readBuffer.Length);
-                parser.Parse(readBuffer, 0, readBytes);
-            }
-
-            return result;
+            return ReceiveResponse();
         }
 
         public UInt32 ReadVersion()
@@ -252,21 +310,14 @@ namespace BrutzelProg
 
             StxEtxPacket packet = new StxEtxPacket(cmdData);
             byte[] bytes = packet.GetBytes();
-            _ComPort.Write(bytes, 0, bytes.Length);
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (ReadVersion)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (ReadVersion)");
 
-            byte[] result = null;
-            StxEtxParser parser = new StxEtxParser();
-
-            parser.PacketComplete += new StxEtxParser.PacketCompleteHandler((par, data) => {
-                result = data;
-            });
-
-            byte[] readBuffer = new byte[512];
-            while (result == null)
-            {
-                int readBytes = _ComPort.Read(readBuffer, 0, readBuffer.Length);
-                parser.Parse(readBuffer, 0, readBytes);
-            }
+            byte[] result = ReceiveResponse();
 
             return (UInt32)((result[0] << 24) | (result[1] << 16) | (result[2] << 8) | (result[3] << 0));
         }
@@ -294,7 +345,12 @@ namespace BrutzelProg
             stream.EndPacket();
 
             byte[] bytes = stream.GetBytes();
-            _ComPort.Write(bytes, 0, bytes.Length);
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (WriteEfb)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (WriteEfb)");
         }
 
         public void ReadEfb(int addr, byte[] data, int offset, int count)
@@ -319,23 +375,14 @@ namespace BrutzelProg
             stream.EndPacket();
 
             byte[] bytes = stream.GetBytes();
-            _ComPort.Write(bytes, 0, bytes.Length);
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (ReadEfb)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (ReadEfb)");
 
-
-            byte[] result = null;
-            StxEtxParser parser = new StxEtxParser();
-
-            parser.PacketComplete += new StxEtxParser.PacketCompleteHandler((par, d) => {
-                result = d;
-            });
-
-            byte[] readBuffer = new byte[512];
-            while (result == null)
-            {
-                int readBytes = _ComPort.Read(readBuffer, 0, readBuffer.Length);
-                parser.Parse(readBuffer, 0, readBytes);
-            }
-
+            byte[] result = ReceiveResponse();
             result.CopyTo(data, offset);
         }
 
