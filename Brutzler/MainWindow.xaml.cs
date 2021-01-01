@@ -10,25 +10,14 @@ using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
-using System.Xml;
-using System.Xml.Linq;
 using IniParser;
 using IniParser.Model;
-using System.Net;
 using IniParser.Parser;
-using System.CodeDom;
-using System.Windows.Shell;
 
 namespace Brutzler
 {
@@ -57,8 +46,6 @@ namespace Brutzler
 
         string ComPort = "";
         public ObservableCollection<RomListViewItem> RomList { get; set; }
-
-        string _ProjectFile = "";
 
         FlashManager _FlashManager = new FlashManager(RomMemorySize / RomPartitionSize, RomPartitionSize);
         SaveRamManager _SaveRamManager = new SaveRamManager(SaveRamSize, SaveRamFragmentSize);
@@ -135,6 +122,12 @@ namespace Brutzler
                 _SaveRamManager.Return((int)item.SaveOffset * SaveRamFragmentSize);
             }
             RomList.Remove(item);
+        }
+
+        private void RemoveAllRoms()
+        {
+            while (RomList.Count > 0)
+                RemoveRom(RomList[0]);
         }
 
         void EditRom(RomListViewItem item)
@@ -818,179 +811,65 @@ namespace Brutzler
             }
         }
 
-        private void MenuItem_UpdateConfig_Click(object sender, RoutedEventArgs e)
+        private void MenuItem_LoadFromCartClick(object sender, RoutedEventArgs e)
         {
-            if (RomList.Count > 0)
-            {
-                EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument();
-                arg.OnLoadData = new LoadData(() => {
-                    byte[] config = GetConfig();
-                    
-                    File.WriteAllBytes("test.bin", config);
-
-                    SwapArray(config);
-                    return GetPages(config, BootPageSize);
-                });
-                arg.Offset = BootMemoryOffset + DfsOffset;
-                arg.SectorSize = BootSectorSize;
-                RunTaskInProgressWindow("Update Config", Action_EraseAndWriteFlash, arg);
-            }
-        }
-
-        private void MenuItem_SaveProject_Click(object sender, RoutedEventArgs e)
-        {
-            if (RomList.Count > 0)
-            {
-                if (String.IsNullOrEmpty(_ProjectFile))
-                {
-                    SaveProjectAs();
-                }
-                else
-                {
-                    SaveProject(_ProjectFile);
-                }
-            }
-            else
-            {
-                MessageBox.Show("Nothing to save", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void MenuItem_SaveProjectAs_Click(object sender, RoutedEventArgs e)
-        {
-            if (RomList.Count > 0)
-            {
-                SaveProjectAs();
-            }
-            else
-            {
-                MessageBox.Show("Nothing to save", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-        }
-
-        private void SaveProjectAs()
-        {
-            SaveFileDialog d = new SaveFileDialog();
-            d.Filter = "BRUTZLER project (*.bpj)|*.bpj|all files|*.*";
-            if (d.ShowDialog().Value == true)
-            {
-                _ProjectFile = d.FileName;
-                SaveProject(_ProjectFile);
-            }
-        }
-
-        private void SaveProject(string filename)
-        {
+            IniData iniDat;
             try
             {
-                var xml = new XElement("Roms", RomList.Select(x => new XElement("Rom",
-                    new XAttribute("GameId", x.FullId),
-                    new XAttribute("GameName", x.Name),
-                    new XAttribute("FileName", x.FileName),
-                    new XAttribute("TvType", x.Tv),
-                    new XAttribute("CicType", x.Cic),
-                    new XAttribute("SaveType", x.Save),
-                    new XAttribute("RomSize", x.Size),
-                    new XAttribute("RomCrc", x.Crc),
-                    new XAttribute("IsAutoBoot", x.IsAutoBoot))));
-                using (var writer = File.CreateText(filename))
-                {
-                    writer.WriteLine(xml);
-                }
+                iniDat = ReadConfigFromCart();
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
             }
-        }
-        private void MenuItem_ConnectClick(object sender, RoutedEventArgs e)
-        {
-            var iniDat = ReadConfigFromCart();
-            int numRoms = int.Parse(iniDat.Sections["CART"].GetKeyData("NUM_ROMS").Value);
 
-            for (int romIndex = 0; romIndex < numRoms; romIndex++)
+            if (iniDat != null)
             {
-                BrutzelConfig config = BrutzelConfig.CreateFromIniIniData(iniDat, romIndex);
-                List<FlashPartition> partitionList = new List<FlashPartition>();
-                for (int i = 0; i < 32; i++)
+                RemoveAllRoms();
+
+                int numRoms = int.Parse(iniDat.Sections["CART"].GetKeyData("NUM_ROMS").Value);
+
+                for (int romIndex = 0; romIndex < numRoms; romIndex++)
                 {
-                    if (config.RomSize <= i * _FlashManager.PartitionSize)
-                        break;
-
-                    string sectionName = "ROM" + romIndex.ToString();
-                    string mappingKey = "MAPPING" + i.ToString();
-                    byte mapping = byte.Parse(iniDat[sectionName].GetKeyData(mappingKey).Value);
-                    FlashPartition partition = _FlashManager.GetPartition(mapping);
-                    partitionList.Add(partition);
-                    
-                }
-                config.FlashPartitions = partitionList.ToArray();
-
-                RomListViewItem item = new RomListViewItem(config);
-                // Allocate SaveMem if needed
-                int saveSize = GetSaveSize(config.Save);
-                if (saveSize > 0)
-                {
-                    _SaveRamManager.AllocAt(config.SaveOffset * SaveRamFragmentSize, saveSize);
-                    item.IsSaveRamAllocated = true;
-                }
-
-                item.IsFlashed = true;
-                RomList.Add(item);
-            }
-        }
-
-
-
-        private void MenuItem_LoadProject_Click(object sender, RoutedEventArgs e)
-        {
-            OpenFileDialog d = new OpenFileDialog();
-            d.Filter = "BRUTZLER project (*.bpj)|*.bpj|all files|*.*";
-            if (d.ShowDialog(this).Value == true)
-            {
-                try
-                {
-                    using (var reader = File.OpenText(d.FileName))
+                    BrutzelConfig config = BrutzelConfig.CreateFromIniIniData(iniDat, romIndex);
+                    List<FlashPartition> partitionList = new List<FlashPartition>();
+                    for (int i = 0; i < 32; i++)
                     {
-                        using (XmlReader nodeReader = XmlReader.Create(reader))
-                        {
-                            RomList.Clear();
-                            nodeReader.MoveToContent();
-                            XElement xRoot = XElement.Load(nodeReader, LoadOptions.SetLineInfo);
-                            foreach (XElement elem in xRoot.Descendants())
-                            {
-                                RomListViewItem item = new RomListViewItem();
-                                item.FullId = elem.Attribute("GameId").Value;
-                                item.Name = elem.Attribute("GameName").Value;
-                                item.FileName = elem.Attribute("FileName").Value;
-                                item.Tv = (TvType)Enum.Parse(typeof(TvType), elem.Attribute("TvType").Value);
-                                item.Cic = (CicType)Enum.Parse(typeof(CicType), elem.Attribute("CicType").Value);
-                                item.Save = (SaveType)Enum.Parse(typeof(SaveType), elem.Attribute("SaveType").Value);
-                                item.Size = int.Parse(elem.Attribute("RomSize").Value);
-                                try
-                                {
-                                    item.Crc = uint.Parse(elem.Attribute("Crc").Value);
-                                }
-                                catch (Exception)
-                                { }
-                                item.IsAutoBoot = false;
-                                XAttribute isAutoBootAttr = elem.Attribute("IsAutoBoot");
-                                if (isAutoBootAttr != null)
-                                {
-                                    item.IsAutoBoot = bool.Parse(isAutoBootAttr.Value);
-                                }
-                                RomList.Add(item);
-                            }
-                        }
+                        if (config.RomSize <= i * _FlashManager.PartitionSize)
+                            break;
+
+                        string sectionName = "ROM" + romIndex.ToString();
+                        string mappingKey = "MAPPING" + i.ToString();
+                        byte mapping = byte.Parse(iniDat[sectionName].GetKeyData(mappingKey).Value);
+                        FlashPartition partition = _FlashManager.GetPartition(mapping);
+                        partitionList.Add(partition);
+
                     }
-                    _ProjectFile = d.FileName;
+                    config.FlashPartitions = partitionList.ToArray();
+
+                    RomListViewItem item = new RomListViewItem(config);
+                    // Allocate SaveMem if needed
+                    int saveSize = GetSaveSize(config.Save);
+                    if (saveSize > 0)
+                    {
+                        _SaveRamManager.AllocAt(config.SaveOffset * SaveRamFragmentSize, saveSize);
+                        item.IsSaveRamAllocated = true;
+                    }
+
+                    item.IsFlashed = true;
+                    RomList.Add(item);
                 }
-                catch (Exception ex)
+
+                int autobootIndex = int.Parse(iniDat.Sections["CART"].GetKeyData("AUTOBOOT").Value);
+                if (autobootIndex >= 0)
                 {
-                    RomList.Clear();
-                    MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    RomList[autobootIndex].IsAutoBoot = true;
                 }
-                UpdateOffsets();
+            }
+            else
+            {
+                MessageBox.Show("Could not load the config from the cart.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -1033,10 +912,7 @@ namespace Brutzler
 
         private void Button_DeleteAll_Click(object sender, RoutedEventArgs e)
         {
-            while (RomList.Count > 0)
-                RemoveRom(RomList[0]);
-            FlashLevel = 0;
-            SramLevel = 0;
+            RemoveAllRoms();
         }
 
         private void Button_WriteFlash_Click(object sender, RoutedEventArgs e)

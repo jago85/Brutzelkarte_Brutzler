@@ -52,10 +52,7 @@
     <DockPanel LastChildFill="True">
         <Menu DockPanel.Dock="Top" IsMainMenu="True">
             <MenuItem Header="File">
-                <MenuItem Header="Connect" Click="MenuItem_ConnectClick"/>
-                <MenuItem Header="Open Project" Click="MenuItem_LoadProject_Click"/>
-                <MenuItem Header="Save Project" Click="MenuItem_SaveProject_Click"/>
-                <MenuItem Header="Save Project as" Click="MenuItem_SaveProjectAs_Click"/>
+                <MenuItem Header="Load from Cart" Click="MenuItem_LoadFromCartClick"/>
                 <Separator />
                 <MenuItem Header="Connection Settings" Click="MenuItem_ConnectionSettings_Click"/>
                 <Separator />
@@ -64,7 +61,6 @@
             <MenuItem Header="Tools">
                 <MenuItem Header="Update Bootloader" Click="MenuItem_UpdateBootloader_Click" />
                 <MenuItem Header="Update FPGA" Click="MenuItem_UpdateFpga_Click"/>
-                <MenuItem Header="Update Config only" Click="MenuItem_UpdateConfig_Click"/>
                 <Separator />
                 <MenuItem Header="Erase all ROMs" Click="MenuItem_EraseRomFlash_Click"/>
                 <MenuItem Header="Erase Bootloader" Click="MenuItem_EraseBootFlash_Click"/>
