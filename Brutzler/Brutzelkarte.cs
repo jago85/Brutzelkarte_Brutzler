@@ -12,6 +12,20 @@ namespace BrutzelProg
 {
     public class Brutzelkarte
     {
+        enum Commands
+        {
+            SetAddr = 0x01,
+            FlashErase = 0x02,
+            FlashWrite = 0x03,
+            FlashRead = 0x04,
+            SramWrite = 0x05,
+            SramRead = 0x06,
+            EfbWrite = 0x07,
+            EfbRead = 0x08,
+            ReadVersion = 0x09,
+            SetRtc = 0x0A
+        };
+
         FTDI _Ftdi;
         string _PortName = "";
         int _PendingAck = 0;
@@ -100,7 +114,7 @@ namespace BrutzelProg
 
             StxEtxMemoryStream stream = new StxEtxMemoryStream();
             stream.StartPacket();
-            stream.WriteByte(0x01);
+            stream.WriteByte((byte)Commands.SetAddr);
             WriteIntBe(stream, addr);
             stream.EndPacket();
             
@@ -122,12 +136,12 @@ namespace BrutzelProg
             int addr = sectorAddr / 4;
 
             stream.StartPacket();
-            stream.WriteByte(0x01);
+            stream.WriteByte((byte)Commands.SetAddr);
             WriteIntBe(stream, addr);
             stream.EndPacket();
 
             stream.StartPacket();
-            stream.WriteByte(0x02);
+            stream.WriteByte((byte)Commands.FlashErase);
             stream.EndPacket();
 
             byte[] bytes = stream.GetBytes();
@@ -152,12 +166,12 @@ namespace BrutzelProg
             int addr = pageAddr / 4;
 
             stream.StartPacket();
-            stream.WriteByte(0x01);
+            stream.WriteByte((byte)Commands.SetAddr);
             WriteIntBe(stream, addr);
             stream.EndPacket();
 
             stream.StartPacket();
-            stream.WriteByte(0x03);
+            stream.WriteByte((byte)Commands.FlashWrite);
             stream.Write(data, 0, data.Length);
             stream.EndPacket();
 
@@ -181,12 +195,12 @@ namespace BrutzelProg
             int addr = pageAddr / 2;
 
             stream.StartPacket();
-            stream.WriteByte(0x01);
+            stream.WriteByte((byte)Commands.SetAddr);
             WriteIntBe(stream, addr);
             stream.EndPacket();
 
             stream.StartPacket();
-            stream.WriteByte(0x05);
+            stream.WriteByte((byte)Commands.SramWrite);
             stream.Write(data, 0, data.Length);
             stream.EndPacket();
 
@@ -213,7 +227,7 @@ namespace BrutzelProg
         {
             StxEtxMemoryStream stream = new StxEtxMemoryStream();
             stream.StartPacket();
-            stream.WriteByte(0x0A);
+            stream.WriteByte((byte)Commands.SetRtc);
             stream.WriteByte(ConvertToBcd(rtcTime.Second));
             stream.WriteByte(ConvertToBcd(rtcTime.Minute));
             stream.WriteByte(ConvertToBcd(rtcTime.Hour));
@@ -267,7 +281,7 @@ namespace BrutzelProg
         public byte[] ReadFlashPage()
         {
             byte[] cmdData = new byte[] {
-                0x04
+                (byte)Commands.FlashRead
             };
 
             StxEtxPacket packet = new StxEtxPacket(cmdData);
@@ -287,7 +301,7 @@ namespace BrutzelProg
             Console.WriteLine("ReadSramPage");
 
             byte[] cmdData = new byte[] {
-                0x06
+                (byte)Commands.SramRead
             };
 
             StxEtxPacket packet = new StxEtxPacket(cmdData);
@@ -305,7 +319,7 @@ namespace BrutzelProg
         public UInt32 ReadVersion()
         {
             byte[] cmdData = new byte[] {
-                0x09
+                (byte)Commands.ReadVersion
             };
 
             StxEtxPacket packet = new StxEtxPacket(cmdData);
@@ -334,12 +348,12 @@ namespace BrutzelProg
             StxEtxMemoryStream stream = new StxEtxMemoryStream();
 
             stream.StartPacket();
-            stream.WriteByte(0x01);
+            stream.WriteByte((byte)Commands.SetAddr);
             WriteIntBe(stream, addr);
             stream.EndPacket();
 
             stream.StartPacket();
-            stream.WriteByte(0x07);
+            stream.WriteByte((byte)Commands.EfbWrite);
             stream.WriteByte((byte)(count - 1));
             stream.Write(data, offset, count);
             stream.EndPacket();
@@ -365,12 +379,12 @@ namespace BrutzelProg
             StxEtxMemoryStream stream = new StxEtxMemoryStream();
 
             stream.StartPacket();
-            stream.WriteByte(0x01);
+            stream.WriteByte((byte)Commands.SetAddr);
             WriteIntBe(stream, addr);
             stream.EndPacket();
 
             stream.StartPacket();
-            stream.WriteByte(0x08);
+            stream.WriteByte((byte)Commands.EfbRead);
             stream.WriteByte((byte)(count - 1));
             stream.EndPacket();
 
