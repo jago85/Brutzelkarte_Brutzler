@@ -69,6 +69,11 @@ namespace Brutzler
             {
                 ShowConnectionSettings();
             }
+
+            if (Settings.Default.ConnectOnStartup)
+            {
+                LoadCardContent();
+            }
         }
 
         private void RomList_CollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
@@ -579,7 +584,70 @@ namespace Brutzler
             {
                 ComPort = wnd.SelectedPort;
                 Settings.Default.ComPort = wnd.SelectedPort;
+                Settings.Default.ConnectOnStartup = wnd.ConnectOnStart;
                 Settings.Default.Save();
+            }
+        }
+
+        private void LoadCardContent()
+        {
+            IniData iniDat;
+            try
+            {
+                iniDat = ReadConfigFromCart();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            if (iniDat != null)
+            {
+                RemoveAllRoms();
+
+                int numRoms = int.Parse(iniDat.Sections["CART"].GetKeyData("NUM_ROMS").Value);
+
+                for (int romIndex = 0; romIndex < numRoms; romIndex++)
+                {
+                    BrutzelConfig config = BrutzelConfig.CreateFromIniIniData(iniDat, romIndex);
+                    List<FlashPartition> partitionList = new List<FlashPartition>();
+                    for (int i = 0; i < 32; i++)
+                    {
+                        if (config.RomSize <= i * _FlashManager.PartitionSize)
+                            break;
+
+                        string sectionName = "ROM" + romIndex.ToString();
+                        string mappingKey = "MAPPING" + i.ToString();
+                        byte mapping = byte.Parse(iniDat[sectionName].GetKeyData(mappingKey).Value);
+                        FlashPartition partition = _FlashManager.GetPartition(mapping);
+                        partitionList.Add(partition);
+
+                    }
+                    config.FlashPartitions = partitionList.ToArray();
+
+                    RomListViewItem item = new RomListViewItem(config);
+                    // Allocate SaveMem if needed
+                    int saveSize = GetSaveSize(config.Save);
+                    if (saveSize > 0)
+                    {
+                        _SaveRamManager.AllocAt(config.SaveOffset * SaveRamFragmentSize, saveSize);
+                        item.IsSaveRamAllocated = true;
+                    }
+
+                    item.IsFlashed = true;
+                    RomList.Add(item);
+                }
+
+                int autobootIndex = int.Parse(iniDat.Sections["CART"].GetKeyData("AUTOBOOT").Value);
+                if (autobootIndex >= 0)
+                {
+                    RomList[autobootIndex].IsAutoBoot = true;
+                }
+            }
+            else
+            {
+                MessageBox.Show("Could not load the config from the cart.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
         }
 
@@ -818,64 +886,7 @@ namespace Brutzler
 
         private void MenuItem_LoadFromCartClick(object sender, RoutedEventArgs e)
         {
-            IniData iniDat;
-            try
-            {
-                iniDat = ReadConfigFromCart();
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.Message, "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
-            }
-
-            if (iniDat != null)
-            {
-                RemoveAllRoms();
-
-                int numRoms = int.Parse(iniDat.Sections["CART"].GetKeyData("NUM_ROMS").Value);
-
-                for (int romIndex = 0; romIndex < numRoms; romIndex++)
-                {
-                    BrutzelConfig config = BrutzelConfig.CreateFromIniIniData(iniDat, romIndex);
-                    List<FlashPartition> partitionList = new List<FlashPartition>();
-                    for (int i = 0; i < 32; i++)
-                    {
-                        if (config.RomSize <= i * _FlashManager.PartitionSize)
-                            break;
-
-                        string sectionName = "ROM" + romIndex.ToString();
-                        string mappingKey = "MAPPING" + i.ToString();
-                        byte mapping = byte.Parse(iniDat[sectionName].GetKeyData(mappingKey).Value);
-                        FlashPartition partition = _FlashManager.GetPartition(mapping);
-                        partitionList.Add(partition);
-
-                    }
-                    config.FlashPartitions = partitionList.ToArray();
-
-                    RomListViewItem item = new RomListViewItem(config);
-                    // Allocate SaveMem if needed
-                    int saveSize = GetSaveSize(config.Save);
-                    if (saveSize > 0)
-                    {
-                        _SaveRamManager.AllocAt(config.SaveOffset * SaveRamFragmentSize, saveSize);
-                        item.IsSaveRamAllocated = true;
-                    }
-
-                    item.IsFlashed = true;
-                    RomList.Add(item);
-                }
-
-                int autobootIndex = int.Parse(iniDat.Sections["CART"].GetKeyData("AUTOBOOT").Value);
-                if (autobootIndex >= 0)
-                {
-                    RomList[autobootIndex].IsAutoBoot = true;
-                }
-            }
-            else
-            {
-                MessageBox.Show("Could not load the config from the cart.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            LoadCardContent();
         }
 
         private void MenuItem_ConnectionSettings_Click(object sender, RoutedEventArgs e)

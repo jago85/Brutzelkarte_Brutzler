@@ -12,6 +12,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using Brutzler.Properties;
 using FTD2XX_NET;
 using static FTD2XX_NET.FTDI;
 
@@ -28,6 +29,7 @@ namespace Brutzler
         {
             InitializeComponent();
             UpdatePorts();
+            LoadConfig();
             DataContext = this;
         }
 
@@ -47,6 +49,21 @@ namespace Brutzler
             PortNames = names;
         }
 
+        void LoadConfig()
+        {
+            ConnectOnStart = Settings.Default.ConnectOnStartup;
+
+            // Pre-select current device if present
+            for (int i = 0; i < _Devices.Length; i++)
+            {
+                if (_Devices[i].SerialNumber.Equals(Settings.Default.ComPort))
+                {
+                    SelectedIndex = i;
+                    break;
+                }
+            }
+        }
+
         string[] _PortNames;
         public string[] PortNames
         {
@@ -54,7 +71,21 @@ namespace Brutzler
             set
             {
                 _PortNames = value;
-                OnPropertyChanged("PortNames");
+                OnPropertyChanged(nameof(PortNames));
+            }
+        }
+
+        bool _ConnectOnStart;
+        public bool ConnectOnStart
+        {
+            get => _ConnectOnStart;
+            set
+            {
+                if (_ConnectOnStart != value)
+                {
+                    _ConnectOnStart = value;
+                    OnPropertyChanged(nameof(ConnectOnStart));
+                }
             }
         }
 
