@@ -63,6 +63,14 @@ namespace Brutzler
             ComPort = Settings.Default.ComPort;
         }
 
+        private void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (String.IsNullOrEmpty(ComPort))
+            {
+                ShowConnectionSettings();
+            }
+        }
+
         private void RomList_CollectionChanged(object sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         {
             UpdateOffsets();
@@ -521,21 +529,6 @@ namespace Brutzler
             return dataList;
         }
 
-        List<byte[]> GetPages(byte[] data, int pageSize)
-        {
-            List<byte[]> list = new List<byte[]>();
-            using (MemoryStream ms = new MemoryStream(data))
-            {
-                while (ms.Position < ms.Length)
-                {
-                    byte[] pageData = new byte[pageSize];
-                    ms.Read(pageData, 0, pageData.Length);
-                    list.Add(pageData);
-                }
-            }
-            return list;
-        }
-
         RomEndianess GetRomEndianess(byte[] firstPage)
         {
             UInt32 firstWord = 0;
@@ -576,6 +569,18 @@ namespace Brutzler
                 Title = title
             };
             wnd.ShowDialog();
+        }
+
+        private void ShowConnectionSettings()
+        {
+            ConnectionSettingsWindow wnd = new ConnectionSettingsWindow();
+            wnd.Owner = this;
+            if (wnd.ShowDialog().Value == true)
+            {
+                ComPort = wnd.SelectedPort;
+                Settings.Default.ComPort = wnd.SelectedPort;
+                Settings.Default.Save();
+            }
         }
 
         #region Menu Items
@@ -875,14 +880,7 @@ namespace Brutzler
 
         private void MenuItem_ConnectionSettings_Click(object sender, RoutedEventArgs e)
         {
-            ConnectionSettingsWindow wnd = new ConnectionSettingsWindow();
-            wnd.Owner = this;
-            if (wnd.ShowDialog().Value == true)
-            {
-                ComPort = wnd.SelectedPort;
-                Settings.Default.ComPort = wnd.SelectedPort;
-                Settings.Default.Save();
-            }
+            ShowConnectionSettings();
         }
 
         private void MenuItem_AboutClick(object sender, RoutedEventArgs e)

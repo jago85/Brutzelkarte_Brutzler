@@ -6,7 +6,7 @@
         xmlns:local="clr-namespace:Brutzler"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
     mc:Ignorable="d"
-        Title="BRUTZLER" Height="480" Width="620">
+        Title="BRUTZLER" Height="480" Width="620" Loaded="Window_Loaded">
     <Window.Resources>
         <local:ByteToMbConverter x:Key="ByteToMbConverter"/>
         <local:MemoryOverflowConverter x:Key="MemoryOverflowConverter"/>
