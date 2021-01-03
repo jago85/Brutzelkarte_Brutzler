@@ -28,6 +28,7 @@ namespace Brutzler
         public ConnectionSettingsWindow()
         {
             InitializeComponent();
+            SelectedIndex = -1;
             UpdatePorts();
             LoadConfig();
             DataContext = this;
@@ -39,24 +40,27 @@ namespace Brutzler
             FT_STATUS status;
             uint numDevices = 0;
             status = ftdi.GetNumberOfDevices(ref numDevices);
-            FT_DEVICE_INFO_NODE[] devices = new FT_DEVICE_INFO_NODE[numDevices];
-            ftdi.GetDeviceList(devices);
 
             // filter valid devices
             // opened devices can not be displayed
             List<string> names = new List<string>((int)numDevices);
             List<FT_DEVICE_INFO_NODE> validDevices = new List<FT_DEVICE_INFO_NODE>((int)numDevices);
-            foreach (var d in devices)
+            if (numDevices > 0)
             {
-                if ((d.Type != FT_DEVICE.FT_DEVICE_UNKNOWN)
-                    && (!String.IsNullOrEmpty(d.SerialNumber)))
+                FT_DEVICE_INFO_NODE[] devices = new FT_DEVICE_INFO_NODE[numDevices];
+                ftdi.GetDeviceList(devices);
+                foreach (var d in devices)
                 {
-                    validDevices.Add(d);
-                    names.Add(String.Format("{0} ({1})", d.SerialNumber, d.Description));
+                    if ((d.Type != FT_DEVICE.FT_DEVICE_UNKNOWN)
+                        && (!String.IsNullOrEmpty(d.SerialNumber)))
+                    {
+                        validDevices.Add(d);
+                        names.Add(String.Format("{0} ({1})", d.SerialNumber, d.Description));
+                    }
                 }
             }
 
-            _Devices = devices.ToArray();
+            _Devices = validDevices.ToArray();
             PortNames = names.ToArray();
         }
 
@@ -118,7 +122,8 @@ namespace Brutzler
 
         private void Button_Ok_Click(object sender, RoutedEventArgs e)
         {
-            if (SelectedIndex >= 0)
+            if ((SelectedIndex >= 0)
+                && (SelectedIndex < _Devices.Length))
             {
                 SelectedPort = _Devices[SelectedIndex].SerialNumber;
             }

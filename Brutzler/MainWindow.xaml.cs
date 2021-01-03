@@ -70,7 +70,8 @@ namespace Brutzler
                 ShowConnectionSettings();
             }
 
-            if (Settings.Default.ConnectOnStartup)
+            if ((Settings.Default.ConnectOnStartup)
+                && (!String.IsNullOrEmpty(ComPort)))
             {
                 LoadCardContent();
             }
@@ -651,6 +652,16 @@ namespace Brutzler
             }
         }
 
+        bool CheckDeviceSelected()
+        {
+            if (String.IsNullOrEmpty(ComPort))
+            {
+                MessageBox.Show("No device selected.\r\nPlease go into Connection Settings and select a device.", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+            return true;
+        }
+
         #region Menu Items
 
         private void MenuItem_Edit_Click(object sender, RoutedEventArgs e)
@@ -886,6 +897,10 @@ namespace Brutzler
 
         private void MenuItem_LoadFromCartClick(object sender, RoutedEventArgs e)
         {
+            if (!CheckDeviceSelected())
+            {
+                return;
+            }
             LoadCardContent();
         }
 
@@ -926,6 +941,10 @@ namespace Brutzler
 
         private void Button_WriteFlash_Click(object sender, RoutedEventArgs e)
         {
+            if (!CheckDeviceSelected())
+            {
+                return;
+            }
             if (FlashLevel > FlashSize)
             {
                 MessageBox.Show("The ROMs in the list require too much FLASH.\r\nPlease remove some ROMs.", "Not enough FLASH", MessageBoxButton.OK, MessageBoxImage.Error);
