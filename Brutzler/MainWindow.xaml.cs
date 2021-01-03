@@ -144,6 +144,13 @@ namespace Brutzler
                 RemoveRom(RomList[0]);
         }
 
+        private void RemoveFlashedRoms()
+        {
+            var flashedRoms = RomList.Where(r => r.IsFlashed == true ).ToArray();
+            foreach (var rom in flashedRoms)
+                RemoveRom(rom);
+        }
+
         void EditRom(RomListViewItem item)
         {
             BrutzelConfig config = item.Config;
@@ -605,7 +612,7 @@ namespace Brutzler
 
             if (iniDat != null)
             {
-                RemoveAllRoms();
+                RemoveFlashedRoms();
 
                 int numRoms = int.Parse(iniDat.Sections["CART"].GetKeyData("NUM_ROMS").Value);
 
