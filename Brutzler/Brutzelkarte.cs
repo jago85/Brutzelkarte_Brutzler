@@ -266,11 +266,20 @@ namespace BrutzelProg
             byte[] buffer = new byte[64];
             while (receivedData == false)
             {
-                uint len = 0;
-                FT_STATUS status = _Ftdi.Read(buffer, (uint)buffer.Length, ref len);
-                if (status != FT_STATUS.FT_OK)
+                if (_WaitHandle.WaitOne(1000) == false)
                     throw new Exception("Error reading data (WaitAck)");
-                _AckParser.Parse(buffer, 0, (int)len);
+
+                uint rxBytes = 0;
+                _Ftdi.GetRxBytesAvailable(ref rxBytes);
+                if (rxBytes > 0)
+                {
+                    byte[] readBuffer = new byte[rxBytes];
+                    uint readBytes = 0;
+                    FT_STATUS status = _Ftdi.Read(readBuffer, (uint)readBuffer.Length, ref readBytes);
+                    if (status != FT_STATUS.FT_OK)
+                        throw new Exception("Error reading data (WaitAck)");
+                    _AckParser.Parse(readBuffer, 0, (int)readBytes);
+                }
             }
 
             _AckParser.PacketComplete -= handler;
