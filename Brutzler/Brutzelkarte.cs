@@ -51,8 +51,6 @@ namespace BrutzelProg
             if (status == FT_STATUS.FT_OK)
                 status = _Ftdi.InTransferSize(64);
             if (status == FT_STATUS.FT_OK)
-                status = _Ftdi.SetTimeouts(1, 0);
-            if (status == FT_STATUS.FT_OK)
                 status = _Ftdi.SetEventNotification(FT_EVENTS.FT_EVENT_RXCHAR, _WaitHandle);
             if (status != FT_STATUS.FT_OK)
                 throw new Exception("Error opening device " + _PortName);
