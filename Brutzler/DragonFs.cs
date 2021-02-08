@@ -1,11 +1,8 @@
 ﻿using Crc32;
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.IO;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace DragonFS
 {
@@ -34,7 +31,7 @@ namespace DragonFS
     {
         const UInt32 ROOT_FLAGS     = 0xFFFFFFFF;
         const UInt32 ROOT_NEXTENTRY = 0xDEADBEEF;
-        const string ROOT_PATH   = "DragonFS 1.0";
+        const string ROOT_PATH   = "DragonFS 2.0";
 
         List<DfsSector> _SectorList = new List<DfsSector>();
         UInt32 _NextOffset = 0;
@@ -71,9 +68,20 @@ namespace DragonFS
             return new DfsDirectoryEntry(NewSector());
         }
 
-        public DfsFileEntry NewFileEntry()
+        public uint NewBlob(int size)
         {
-            return new DfsFileEntry(NewSector());
+            if (size <= 0)
+                throw new NotSupportedException("Cannot create blob with no data");
+
+            uint firstOffset = 0;
+            while (size > 0)
+            {
+                DfsSector sector = NewSector();
+                if (firstOffset == 0)
+                    firstOffset = sector.Offset;
+                size -= (int)DfsSector.SECTOR_SIZE;
+            }
+            return firstOffset;
         }
 
         public DfsSector FindSector(uint offset)
@@ -313,10 +321,25 @@ namespace DragonFS
             DfsSector sector = new DfsSector(0);
             source.Read(sector.Buffer, 0, (int)DfsSector.SECTOR_SIZE);
             DfsDirectoryEntry root = new DfsDirectoryEntry(sector);
+            bool checkValid = true;
             if ((root.Flags != ROOT_FLAGS) || (root.NextEntry != ROOT_NEXTENTRY))
             {
-                throw new ArgumentException("source", "The stream does not contain a valid DFS.");
+                checkValid = false;
             }
+            else
+            {
+                // Check DFS version string
+                if (!root.Path.Equals(DragonFs.ROOT_PATH))
+                {
+                    checkValid = false;
+                }
+            }
+
+            if (checkValid == false)
+            {
+                throw new ArgumentException("source", "The stream does not contain a valid DFS 2.0 image");
+            }
+
             while (source.Position != source.Length)
             {
                 sector = newFs.NewSector();
@@ -334,9 +357,9 @@ namespace DragonFS
         {
             List<DfsSector> sectors = new List<DfsSector>(_SectorList);
             sectors.Remove(FindSector(0));
-            DfsDirectoryEntry currentDir = _RootDirectory;
             WalkDirectory(_RootDirectory, sectors);
-
+            if (sectors.Count > 0)
+                throw new Exception("Unreferenced sectors found");
         }
 
         private void WalkDirectory(DfsDirectoryEntry dir, List<DfsSector> sectors)
@@ -358,8 +381,7 @@ namespace DragonFS
                     //if ((entry.Flags & DfsDirectoryEntry.FLAG_FILE) != 0)
                     {
                         sectors.Remove(sector);
-                        sector = FindSector(entry.FilePointer);
-                        WalkFile(new DfsFileEntry(sector), sectors);
+                        WalkFile(entry, sectors);
                     }
                 }
 
@@ -369,19 +391,16 @@ namespace DragonFS
             } while (true);
         }
 
-        private void WalkFile(DfsFileEntry file, List<DfsSector> sectors)
+        private void WalkFile(DfsDirectoryEntry fileEntry, List<DfsSector> sectors)
         {
+            int fileSize = (int)(fileEntry.Flags & ~DfsDirectoryEntry.FLAG_MASK);
+            uint offset = 0;
             do
             {
-                var sector = FindSector(file.Offset);
+                var sector = FindSector(fileEntry.FilePointer + offset);
                 sectors.Remove(sector);
-                file = new DfsFileEntry(sector);
-
-                if (file.NextSector == 0)
-                    break;
-                file = new DfsFileEntry(FindSector(file.NextSector));
-            }
-            while (true);
+                offset += DfsSector.SECTOR_SIZE;
+            } while (offset < fileSize);
         }
     }
 
@@ -418,9 +437,14 @@ namespace DragonFS
     {
         public const int MAX_FILENAME_LENGTH = 243;
         public const UInt32 FLAG_FILE = 0x00000000;
-        public const UInt32 FLAG_DIR = 0x01000000;
-        public const UInt32 FLAG_EOF = 0x02000000;
-        public const UInt32 FLAG_MASK = 0xFF000000;
+        public const UInt32 FLAG_DIR = 0x10000000;
+        public const UInt32 FLAG_EOF = 0x20000000;
+        public const UInt32 FLAG_MASK = 0xF0000000;
+
+        public const Int32 NEXT_OFFSET = 0;
+        public const Int32 FLAGS_OFFSET = 4;
+        public const Int32 PATH_OFFSET = 8;
+        public const Int32 FILEPOINTER_OFFSET = 252;
 
         DfsSector _Sector;
 
@@ -433,11 +457,11 @@ namespace DragonFS
         {
             set
             {
-                Utils.WriteArrayBigEndian(_Sector.Buffer, 0, value);
+                Utils.WriteArrayBigEndian(_Sector.Buffer, FLAGS_OFFSET, value);
             }
             get
             {
-                return Utils.ReadArrayBigEndianUint32(_Sector.Buffer, 0);
+                return Utils.ReadArrayBigEndianUint32(_Sector.Buffer, FLAGS_OFFSET);
             }
         }
 
@@ -445,11 +469,11 @@ namespace DragonFS
         {
             set
             {
-                Utils.WriteArrayBigEndian(_Sector.Buffer, 4, value);
+                Utils.WriteArrayBigEndian(_Sector.Buffer, NEXT_OFFSET, value);
             }
             get
             {
-                return Utils.ReadArrayBigEndianUint32(_Sector.Buffer, 4);
+                return Utils.ReadArrayBigEndianUint32(_Sector.Buffer, NEXT_OFFSET);
             }
         }
 
@@ -462,9 +486,9 @@ namespace DragonFS
                 var buf = _Sector.Buffer;
                 for (int i = 0; i < value.Length; i++)
                 {
-                    buf[8 + i] = (byte)value[i];
+                    buf[PATH_OFFSET + i] = (byte)value[i];
                 }
-                buf[8 + value.Length] = 0;
+                buf[PATH_OFFSET + value.Length] = 0;
             }
             get
             {
@@ -472,9 +496,9 @@ namespace DragonFS
                 StringBuilder sb = new StringBuilder();
                 for (int i = 0; i < MAX_FILENAME_LENGTH; i++)
                 {
-                    if (buf[8 + i] == 0)
+                    if (buf[PATH_OFFSET + i] == 0)
                         break;
-                    sb.Append((char)buf[8 + i]);
+                    sb.Append((char)buf[PATH_OFFSET + i]);
                 }
                 return sb.ToString();
             }
@@ -484,11 +508,11 @@ namespace DragonFS
         {
             set
             {
-                Utils.WriteArrayBigEndian(_Sector.Buffer, 252, value);
+                Utils.WriteArrayBigEndian(_Sector.Buffer, FILEPOINTER_OFFSET, value);
             }
             get
             {
-                return Utils.ReadArrayBigEndianUint32(_Sector.Buffer, 252);
+                return Utils.ReadArrayBigEndianUint32(_Sector.Buffer, FILEPOINTER_OFFSET);
             }
         }
 
@@ -498,43 +522,13 @@ namespace DragonFS
         }
     }
 
-    public class DfsFileEntry
-    {
-        public const UInt32 SECTOR_PAYLOAD = DfsSector.SECTOR_SIZE - 4;
-
-        DfsSector _Sector;
-
-        public DfsFileEntry(DfsSector sector)
-        {
-            _Sector = sector;
-        }
-
-        public UInt32 NextSector
-        {
-            set
-            {
-                Utils.WriteArrayBigEndian(_Sector.Buffer, 0, value);
-            }
-            get
-            {
-                return Utils.ReadArrayBigEndianUint32(_Sector.Buffer, 0);
-            }
-        }
-
-        public UInt32 Offset => _Sector.Offset;
-
-        public byte[] Data => _Sector.Buffer;
-    }
-
     public class DfsFileStream : Stream
     {
         DragonFs _Fs;
         DfsDirectoryEntry _Root;
         bool _CanRead = false;
         bool _CanWrite = false;
-        uint _Position = 0;
-        DfsFileEntry _CurrentEntry = null;
-        uint _CurrentEntryPosition = 0;
+        MemoryStream _MemStream;
 
         public DfsFileStream(DragonFs fs, DfsDirectoryEntry root, FileAccess access)
         {
@@ -542,8 +536,37 @@ namespace DragonFS
             _Root = root;
             if (root.FilePointer != 0)
             {
-                _CurrentEntry = new DfsFileEntry(_Fs.FindSector(root.FilePointer));
+                if ((access == FileAccess.Write) || (access == FileAccess.ReadWrite))
+                    throw new NotSupportedException("Writing an existing file is not supported");
+
+                // Create MemoryStream from existing data
+                _MemStream = new MemoryStream((int)(_Root.Flags & ~DfsDirectoryEntry.FLAG_MASK));
+
+                int remainingBytes = (int)Length;
+                uint offset = root.FilePointer;
+                while (remainingBytes > 0)
+                {
+                    // Fetch a sector and write to the stream
+                    DfsSector sector = _Fs.FindSector(offset);
+                    int sectorBytes = (int)DfsSector.SECTOR_SIZE;
+                    if (sectorBytes >= remainingBytes)
+                        sectorBytes = remainingBytes;
+                    _MemStream.Write(sector.Buffer, 0, sectorBytes);
+
+                    remainingBytes -= sectorBytes;
+                    offset += DfsSector.SECTOR_SIZE;
+                }
+                _MemStream.Seek(0, SeekOrigin.Begin);
             }
+            else
+            {
+                if (access == FileAccess.Read)
+                    throw new NotSupportedException("Cannot read file without content");
+
+                // Create MemoryStream for all file operations
+                _MemStream = new MemoryStream();
+            }
+
             switch (access)
             {
                 case FileAccess.Read:
@@ -565,11 +588,11 @@ namespace DragonFS
 
         public override bool CanWrite => _CanWrite;
 
-        public override long Length => _Root.Flags;
+        public override long Length => _Root.Flags & ~DfsDirectoryEntry.FLAG_MASK;
 
         public override long Position
         {
-            get => _Position;
+            get => _MemStream.Position;
             set => throw new NotImplementedException();
         }
 
@@ -590,87 +613,38 @@ namespace DragonFS
             
         }
 
+        public override void Close()
+        {
+            if ((_Root.FilePointer == 0) && (_CanWrite) && (_MemStream.Length > 0))
+            {
+                // Create a data blob in the FS
+                uint blobOffset = _Fs.NewBlob((int)_MemStream.Length);
+
+                // Write the data to the blob sectors
+                _MemStream.Seek(0, SeekOrigin.Begin);
+                while (_MemStream.Position < _MemStream.Length)
+                {
+                    DfsSector sector = _Fs.FindSector((uint)(blobOffset + _MemStream.Position));
+                    _MemStream.Read(sector.Buffer, 0, (int)DfsSector.SECTOR_SIZE);
+                }
+
+                _Root.FilePointer = blobOffset;
+                _Root.Flags = (uint)(_MemStream.Length & ~DfsDirectoryEntry.FLAG_MASK);
+            }
+            _MemStream.Close();
+            base.Close();
+        }
+
         public override int Read(byte[] buffer, int offset, int count)
         {
             EnsureCanRead();
-
-            if (_Root.FilePointer == 0)
-            {
-                // no content
-                return 0;
-            }
-
-            // don't read beyond the file end
-            int readableBytes = (int)(Length - Position);
-            if (count > readableBytes)
-            {
-                count = readableBytes;
-            }
-
-            int readBytes = 0;
-
-            while (count > 0)
-            {
-                // stop on end of file
-                if (_Position >= Length)
-                    break;
-
-                readableBytes = (int)Math.Min(count, DfsFileEntry.SECTOR_PAYLOAD - _CurrentEntryPosition);
-                Array.Copy(_CurrentEntry.Data, 4 + _CurrentEntryPosition, buffer, offset, readableBytes);
-                count -= readableBytes;
-                _CurrentEntryPosition += (uint)readableBytes;
-                _Position += (uint)readableBytes;
-                offset += readableBytes;
-                readBytes += readableBytes;
-
-                if (_CurrentEntryPosition >= DfsFileEntry.SECTOR_PAYLOAD)
-                {
-                    if (_CurrentEntry.NextSector != 0)
-                    {
-                        _CurrentEntry = new DfsFileEntry(_Fs.FindSector(_CurrentEntry.NextSector));
-                    }
-                    _CurrentEntryPosition = 0;
-                }
-            }
-
-            return readBytes;
+            
+            return _MemStream.Read(buffer, offset, count);
         }
 
         public override long Seek(long offset, SeekOrigin origin)
         {
-            if (_Root.FilePointer == 0)
-            {
-                // no content
-                return 0;
-            }
-            if (origin == SeekOrigin.Begin)
-            {
-                if (offset > Length)
-                {
-                    offset = Length;
-                }
-                _Position = (uint)offset;
-                _CurrentEntry = new DfsFileEntry(_Fs.FindSector(_Root.FilePointer));
-                while (offset > 0)
-                {
-                    if (offset >= DfsFileEntry.SECTOR_PAYLOAD)
-                    {
-                        _CurrentEntry = new DfsFileEntry(_Fs.FindSector(_CurrentEntry.NextSector));
-                        offset -= DfsFileEntry.SECTOR_PAYLOAD;
-                        _CurrentEntryPosition = 0;
-                    }
-                    else
-                    {
-                        _CurrentEntryPosition = (uint)offset;
-                        offset = 0;
-                    }
-                }
-            }
-            else
-            {
-                throw new NotImplementedException();
-            }
-            return Position;
+            return _MemStream.Seek(offset, origin);
         }
 
         public override void SetLength(long value)
@@ -682,40 +656,7 @@ namespace DragonFS
         {
             EnsureCanWrite();
 
-            if (_Root.FilePointer == 0)
-            {
-                _CurrentEntry = _Fs.NewFileEntry();
-                _Root.FilePointer = _CurrentEntry.Offset;
-            }
-            while (count > 0)
-            {
-                if (_CurrentEntryPosition == DfsFileEntry.SECTOR_PAYLOAD)
-                {
-                    if (_CurrentEntry.NextSector == 0)
-                    {
-                        DfsFileEntry newEntry = _Fs.NewFileEntry();
-                        _CurrentEntry.NextSector = newEntry.Offset;
-                        _CurrentEntry = newEntry;
-                    }
-                    else
-                    {
-                        _CurrentEntry = new DfsFileEntry(_Fs.FindSector(_CurrentEntry.NextSector));
-                    }
-                    _CurrentEntryPosition = 0;
-                }
-                int writableBytes = (int)Math.Min(count, DfsFileEntry.SECTOR_PAYLOAD - _CurrentEntryPosition);
-                Array.Copy(buffer, offset, _CurrentEntry.Data, 4 + _CurrentEntryPosition, writableBytes);
-                _Position += (uint)writableBytes;
-                offset += writableBytes;
-                count -= writableBytes;
-                if (_Position > _Root.Flags)
-                {
-                    if ((_Position & DfsDirectoryEntry.FLAG_MASK) != 0)
-                        throw new IOException("maximum file size reached");
-                    _Root.Flags = _Position;
-                }
-                _CurrentEntryPosition += (uint)writableBytes;
-            }
+            _MemStream.Write(buffer, offset, count);
         }
     }
 }
