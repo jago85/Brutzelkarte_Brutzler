@@ -23,7 +23,10 @@ namespace BrutzelProg
             EfbWrite = 0x07,
             EfbRead = 0x08,
             ReadVersion = 0x09,
-            SetRtc = 0x0A
+            SetRtc = 0x0A,
+            FlashSelect = 0x0B,
+            GetFlashAddrWidth = 0x0C,
+            GetSramAddrWidth = 0x0D
         };
 
         FTDI _Ftdi;
@@ -125,6 +128,30 @@ namespace BrutzelProg
                 throw new Exception("Wrong number of bytes written (SendAddr)");
         }
 
+        public void SetFlashSelect(FlashType flashType)
+        {
+            byte flashSel;
+            if (flashType == FlashType.Rom)
+                flashSel = 0;
+            else
+                flashSel = 1;
+            Console.WriteLine(String.Format("Set FlashSel: {0}", flashSel));
+
+            StxEtxMemoryStream stream = new StxEtxMemoryStream();
+            stream.StartPacket();
+            stream.WriteByte((byte)Commands.FlashSelect);
+            stream.WriteByte(flashSel);
+            stream.EndPacket();
+
+            byte[] bytes = stream.GetBytes();
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (SetFlashSelect)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (SetFlashSelect)");
+        }
+
         public void EraseSector(int sectorAddr)
         {
             Console.WriteLine(String.Format("Erase sector: 0x{0:X8}", sectorAddr));
@@ -210,6 +237,44 @@ namespace BrutzelProg
             if (bytesWritten != bytes.Length)
                 throw new Exception("Wrong number of bytes written (WriteSram)");
             _PendingAck++;
+        }
+
+        public UInt32 GetFlashSize()
+        {
+            byte[] cmdData = new byte[] {
+                (byte)Commands.GetFlashAddrWidth
+            };
+
+            StxEtxPacket packet = new StxEtxPacket(cmdData);
+            byte[] bytes = packet.GetBytes();
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (GetFlashSize)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (GetFlashSize)");
+
+            byte[] resp = ReceiveResponse();
+            return (UInt32)(Math.Pow(2, resp[0]));
+        }
+
+        public UInt32 GetSramSize()
+        {
+            byte[] cmdData = new byte[] {
+                (byte)Commands.GetSramAddrWidth
+            };
+
+            StxEtxPacket packet = new StxEtxPacket(cmdData);
+            byte[] bytes = packet.GetBytes();
+            uint bytesWritten = 0;
+            FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
+            if (status != FT_STATUS.FT_OK)
+                throw new Exception("Error writing data (GetFlashSize)");
+            if (bytesWritten != bytes.Length)
+                throw new Exception("Wrong number of bytes written (GetFlashSize)");
+
+            byte[] resp = ReceiveResponse();
+            return (UInt32)(Math.Pow(2, resp[0]));
         }
 
         byte ConvertToBcd(int value)
@@ -441,6 +506,12 @@ namespace BrutzelProg
         {
             get => _PendingAck;
         }
+    }
+
+    public enum FlashType
+    { 
+        Rom,
+        Boot
     }
 
     public class BrutzelkarteDummy
