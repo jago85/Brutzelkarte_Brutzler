@@ -39,7 +39,7 @@ namespace BrutzelProg
         public CicType Cic { get; set; }
         public SaveType Save { get; set; }
         public FlashPartition[] FlashPartitions;
-        public byte SaveOffset { get; set; } // in KiB
+        public int SaveOffset { get; set; } // in KiB
         public int RomSize { get; set; } // in Bytes
         public uint RomCrc { get; set; }
 
@@ -190,7 +190,7 @@ namespace BrutzelProg
             cfg.Tv = GetTvFromString(iniData[sectionName].GetKeyData("TV").Value);
             cfg.Cic = GetCicFromString(iniData[sectionName].GetKeyData("CIC").Value);
             cfg.Save = GetSaveFromString(iniData[sectionName].GetKeyData("SAVE").Value);
-            cfg.SaveOffset = byte.Parse(iniData[sectionName].GetKeyData("SAVE_OFFSET").Value);
+            cfg.SaveOffset = int.Parse(iniData[sectionName].GetKeyData("SAVE_OFFSET").Value);
             cfg.RomSize = int.Parse(iniData[sectionName].GetKeyData("ROM_SIZE").Value);
             cfg.RomCrc = uint.Parse(iniData[sectionName].GetKeyData("ROM_CRC").Value, System.Globalization.NumberStyles.HexNumber);
 
