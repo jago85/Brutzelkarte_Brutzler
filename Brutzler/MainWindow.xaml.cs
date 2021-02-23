@@ -18,6 +18,7 @@ using System.Windows.Input;
 using IniParser;
 using IniParser.Model;
 using IniParser.Parser;
+using System.Windows.Threading;
 using System.Runtime.CompilerServices;
 
 namespace Brutzler
@@ -28,15 +29,15 @@ namespace Brutzler
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
         const int MaxPendingAck = 6;
-        const int RomMemorySize = 64 * 1024 * 1024;
+
         const int RomSectorSize = 256 * 1024;
         const int RomPageSize = 256;
         const int RomPartitionSize = 2 * 1024 * 1024;
+
         const int BootMemorySize = 8 * 1024 * 1024;
         const int BootSectorSize = 4 * 1024;
         const int BootPageSize = 256;
 
-        const int SaveRamSize = 256 * 1024;
         const int SaveRamFragmentSize = 1024;
 
         const string DfsConfigPath = "/brutzelkarte/config.ini";
@@ -45,12 +46,51 @@ namespace Brutzler
         string ComPort = "";
         public ObservableCollection<RomListViewItem> RomList { get; set; }
 
-        FlashManager _FlashManager = new FlashManager(RomMemorySize / RomPartitionSize, RomPartitionSize);
-        SaveRamManager _SaveRamManager = new SaveRamManager(SaveRamSize, SaveRamFragmentSize);
+        int _RomMemorySize = 64 * 1024 * 1024;
+        int _SaveRamSize = 256 * 1024;
+
+        FlashManager _FlashManager;// = new FlashManager(RomMemorySize / RomPartitionSize, RomPartitionSize);
+        SaveRamManager _SaveRamManager;// = new SaveRamManager(SaveRamSize, SaveRamFragmentSize);
 
         public MainWindow()
         {
             InitializeComponent();
+
+            //DragonFs dfs = new DragonFs();
+            //byte[] test = new byte[800];
+            //using (DfsFileStream fs = dfs.OpenFile(DfsConfigPath, FileAccess.Write))
+            //{
+            //    Random rnd = new Random();
+            //    rnd.NextBytes(test);
+
+            //    fs.Write(test, 0, test.Length);
+            //}
+
+            //using (var file = File.OpenWrite("test.dfs"))
+            //{
+            //    dfs.WriteToStream(file);
+            //}
+            //dfs = null;
+
+            //using (var file = File.OpenRead("test.dfs"))
+            //{
+            //    dfs = DragonFs.CreateFromStream(file);
+            //}
+
+            //dfs.TestSectorsReferences();
+            //Array.Clear(test, 0, test.Length);
+
+            //using (var fs = dfs.OpenFile(DfsConfigPath, FileAccess.Read))
+            //{
+            //    fs.Read(test, 0, test.Length);
+            //}
+
+            //DispatcherTimer dispatcherTimer = new DispatcherTimer();
+            //dispatcherTimer.Interval = new TimeSpan(0, 0, 1);
+            //dispatcherTimer.Tick += new EventHandler((s, e) => {
+            //    FlashLevel += 10;
+            //});
+            //dispatcherTimer.Start();
 
             Title = "BRUTZLER v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
 
@@ -658,6 +698,22 @@ namespace Brutzler
             }
         }
 
+        void UpdateMemorySizes()
+        {
+            Brutzelkarte cart = new Brutzelkarte(ComPort);
+
+            cart.Open();
+            FlashSizeMib = (int)cart.GetFlashSize() / 1024 / 1024;
+            SramSizeKib = (int)cart.GetSramSize() / 1024;
+            cart.Close();
+        }
+
+        void CreateMemoryManager()
+        {
+            _FlashManager = new FlashManager(_RomMemorySize / RomPartitionSize, RomPartitionSize);
+            _SaveRamManager = new SaveRamManager(_SaveRamSize, SaveRamFragmentSize);
+        }
+
         bool CheckDeviceSelected()
         {
             if (String.IsNullOrEmpty(ComPort))
@@ -739,7 +795,7 @@ namespace Brutzler
                 WriteSramWorkerArgument arg = new WriteSramWorkerArgument();
                 arg.DataList = new List<byte[]>();
                 arg.Offset = 0;
-                for (int i = 0; i < SaveRamSize / 256; i++)
+                for (int i = 0; i < _SaveRamSize / 256; i++)
                 {
                     arg.DataList.Add(new byte[256]);
                 }
@@ -755,7 +811,7 @@ namespace Brutzler
             {
                 ReadSramWorkerArgument arg = new ReadSramWorkerArgument();
                 arg.Offset = 0;
-                arg.Size = SaveRamSize;
+                arg.Size = _SaveRamSize;
                 arg.FileName = d.FileName;
                 RunTaskInProgressWindow("Dump SRAM", Action_ReadSramData, arg);
             }
@@ -768,7 +824,7 @@ namespace Brutzler
             if (d.ShowDialog().Value == true)
             {
                 WriteSramWorkerArgument arg = new WriteSramWorkerArgument();
-                arg.DataList = GetPages(d.FileName, SaveRamSize, 256);
+                arg.DataList = GetPages(d.FileName, _SaveRamSize, 256);
                 arg.Offset = 0;
                 RunTaskInProgressWindow("Restore SRAM", Action_WriteSramData, arg);
             }
@@ -907,6 +963,11 @@ namespace Brutzler
             {
                 return;
             }
+            if (_FlashManager == null)
+            {
+                UpdateMemorySizes();
+                CreateMemoryManager();
+            }
             LoadCardContent();
         }
 
@@ -951,12 +1012,17 @@ namespace Brutzler
             {
                 return;
             }
-            if (FlashLevel > FlashSize)
+            if (_FlashManager == null)
+            {
+                UpdateMemorySizes();
+                CreateMemoryManager();
+            }
+            if (FlashLevel > FlashSizeMib)
             {
                 MessageBox.Show("The ROMs in the list require too much FLASH.\r\nPlease remove some ROMs.", "Not enough FLASH", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
             }
-            if (SramLevel > SaveRamSize / 1024)
+            if (SramLevel > SramSizeKib)
             {
                 MessageBox.Show("The ROMs in the list require too much SRAM.\r\nPlease remove some ROMs.", "Not enough SRAM", MessageBoxButton.OK, MessageBoxImage.Error);
                 return;
@@ -1012,7 +1078,19 @@ namespace Brutzler
             }
         }
 
-        public int FlashSize => RomMemorySize / 1024 / 1024;
+        public int FlashSizeMib
+        {
+            get => _RomMemorySize / 1024 / 1024;
+            set
+            {
+                int newSize = value * 1024 * 1024;
+                if (newSize != _RomMemorySize)
+                {
+                    _RomMemorySize = newSize;
+                    OnPropertyChanged("FlashSizeMib");
+                }
+            }
+        }
 
         int _SramLevel = 0;
         public int SramLevel
@@ -1024,6 +1102,20 @@ namespace Brutzler
                 {
                     _SramLevel = value;
                     OnPropertyChanged();
+                }
+            }
+        }
+
+        public int SramSizeKib
+        {
+            get => _SaveRamSize / 1024;
+            set
+            {
+                int newSize = value * 1024;
+                if (_SaveRamSize != newSize)
+                {
+                    _SaveRamSize = newSize;
+                    OnPropertyChanged("SramSizeKib");
                 }
             }
         }
@@ -1270,7 +1362,7 @@ namespace Brutzler
             progress.Report(info);
 
             // Read the SRAM
-            int pageCnt = SaveRamSize / 256;
+            int pageCnt = _SaveRamSize / 256;
             byte[] readBuffer = new byte[pageCnt * 256];
 
             cart.SendAddr(0);
@@ -1280,7 +1372,7 @@ namespace Brutzler
 
                 byte[] page = cart.ReadSramPage();
                 page.CopyTo(readBuffer, i * 256);
-                info.ActionText = String.Format("Defragmenting SRAM (Read) {0} / {1} KiB", (i + 1) * 256 / 1024, SaveRamSize / 1024);
+                info.ActionText = String.Format("Defragmenting SRAM (Read) {0} / {1} KiB", (i + 1) * 256 / 1024, _SaveRamSize / 1024);
                 info.ProgressPercent = i * 100 / pageCnt;
                 progress.Report(info);
             }
@@ -1304,7 +1396,7 @@ namespace Brutzler
 
             MemoryStream ms = new MemoryStream(writeBuffer);
             byte[] pageBuffer = new byte[256];
-            while (ms.Position < SaveRamSize)
+            while (ms.Position < _SaveRamSize)
             {
                 // Don't allow interrupting the write back process
                 //ct.ThrowIfCancellationRequested();
@@ -1316,8 +1408,8 @@ namespace Brutzler
                     cart.WaitAck();
                 }
 
-                info.ActionText = String.Format("Defragmenting SRAM (Write) {0} / {1} KiB", ms.Position / 1024, SaveRamSize / 1024);
-                info.ProgressPercent = (int)(ms.Position * 100 / SaveRamSize);
+                info.ActionText = String.Format("Defragmenting SRAM (Write) {0} / {1} KiB", ms.Position / 1024, _SaveRamSize / 1024);
+                info.ProgressPercent = (int)(ms.Position * 100 / _SaveRamSize);
                 progress.Report(info);
             }
             while (cart.PendingAck > 0)
@@ -2010,6 +2102,22 @@ namespace Brutzler
         }
 
         public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+        {
+            throw new NotImplementedException();
+        }
+    }
+
+    public class MemoryOverflowConverter2 : IMultiValueConverter
+    {
+
+        public object Convert(object[] values, Type targetType, object parameter, CultureInfo culture)
+        {
+            int val1 = (int)values[0];
+            int val2 = (int)values[1];
+            return (val1 > val2);
+        }
+
+        public object[] ConvertBack(object value, Type[] targetTypes, object parameter, CultureInfo culture)
         {
             throw new NotImplementedException();
         }
