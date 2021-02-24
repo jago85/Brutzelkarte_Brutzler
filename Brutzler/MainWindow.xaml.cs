@@ -931,7 +931,7 @@ namespace Brutzler
                 EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument
                 {
                     SelectedFlash = FlashType.Rom,
-                    Size = RomMemorySize,
+                    Size = _RomMemorySize,
                     SectorSize = RomSectorSize
                 };
                 RunTaskInProgressWindow("Erase all ROMs", Action_EraseAndWriteFlash, arg);
