@@ -133,7 +133,7 @@ namespace Brutzler
             }
             if (item.IsSaveRamAllocated)
             {
-                _SaveRamManager.Return((int)item.SaveOffset * SaveRamFragmentSize);
+                _SaveRamManager.Return(item.SaveOffset * SaveRamFragmentSize);
             }
             RomList.Remove(item);
         }
@@ -469,7 +469,8 @@ namespace Brutzler
 
             cart.Open();
             cart.ReadVersion();
-            cart.SendAddr((BootMemoryOffset + DfsOffset) / 4);
+            cart.SetFlashSelect(FlashType.Boot);
+            cart.SendAddr(DfsOffset / 4);
 
             MemoryStream ms = new MemoryStream();
 
@@ -740,7 +741,7 @@ namespace Brutzler
                 WriteSramWorkerArgument arg = new WriteSramWorkerArgument();
                 arg.DataList = new List<byte[]>();
                 arg.Offset = 0;
-                for (int i = 0; i < 1024; i++)
+                for (int i = 0; i < SaveRamSize / 256; i++)
                 {
                     arg.DataList.Add(new byte[256]);
                 }
@@ -875,7 +876,7 @@ namespace Brutzler
             {
                 EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument
                 {
-                    Offset = RomMemoryOffset,
+                    SelectedFlash = FlashType.Rom,
                     Size = RomMemorySize,
                     SectorSize = RomSectorSize
                 };
@@ -886,7 +887,7 @@ namespace Brutzler
         private void MenuItem_EraseBootFlash_Click(object sender, RoutedEventArgs e)
         {
             EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument();
-            arg.Offset = BootMemoryOffset;
+            arg.SelectedFlash = FlashType.Boot;
             arg.Size = BootMemorySize;
             arg.SectorSize = BootSectorSize;
             RunTaskInProgressWindow("Erase Bootloader", Action_EraseAndWriteFlash, arg);
@@ -1072,7 +1073,7 @@ namespace Brutzler
                     {
                         try
                         {
-                            item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
+                            item.SaveOffset = _SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize;
                         }
                         catch (SaveRamFragmentedException)
                         {
@@ -1080,7 +1081,7 @@ namespace Brutzler
                             DefragSaveRam(cart, progress, ct);
 
                             // Alloc should now be possible
-                            item.SaveOffset = (byte)(_SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize);
+                            item.SaveOffset = _SaveRamManager.Alloc(saveSize) / SaveRamFragmentSize;
                         }
 
                         info.ActionText = "Clear Save";
@@ -1110,6 +1111,8 @@ namespace Brutzler
                 }
 
                 ct.ThrowIfCancellationRequested();
+
+                cart.SetFlashSelect(FlashType.Rom);
 
                 // Erase Flash all partitions
                 int sectorsDeleted = 1;
@@ -1211,11 +1214,12 @@ namespace Brutzler
                 progress.Report(info);
 
                 // Update the Config
+                cart.SetFlashSelect(FlashType.Boot);
                 byte[] configBytes = GetConfig();
                 using (MemoryStream ms = new MemoryStream(configBytes))
                 {
                     // Erase config flash
-                    int addr = BootMemoryOffset + DfsOffset;
+                    int addr = DfsOffset;
                     int erasedBytes = 0;
                     while (erasedBytes < ms.Length)
                     {
@@ -1229,7 +1233,7 @@ namespace Brutzler
                     }
 
                     // Write config data
-                    addr = BootMemoryOffset + DfsOffset;
+                    addr = DfsOffset;
                     while (ms.Position < ms.Length)
                     {
                         // Don't want to break the config
@@ -1289,7 +1293,7 @@ namespace Brutzler
             _SaveRamManager.DefragmentMem((item, newOffset) => {
                 // Find the RomList-Item with this SaveOffset and change it to the new offset
                 var listItem = RomList.Where(x => (x.IsSaveRamAllocated && (x.SaveOffset == (item.Offset / SaveRamFragmentSize)))).First();
-                listItem.SaveOffset = (byte)(newOffset / SaveRamFragmentSize);
+                listItem.SaveOffset = newOffset / SaveRamFragmentSize;
 
                 // Copy the SRAM buffer to the new buffer
                 Array.Copy(readBuffer, item.Offset, writeBuffer, newOffset, item.Size);
@@ -1341,12 +1345,13 @@ namespace Brutzler
             int totalSize = pageList.Count * 256;
             int sectorCount = (int)Math.Ceiling((double)totalSize / BootSectorSize);
 
-            int addr = BootMemoryOffset;
+            int addr = 0;
 
             var cart = new Brutzelkarte(ComPort);
             try
             {
                 cart.Open();
+                cart.SetFlashSelect(FlashType.Boot);
 
                 // Erase the flash
                 for (int i = 0; i < sectorCount; i++)
@@ -1425,6 +1430,7 @@ namespace Brutzler
             try
             {
                 cart.Open();
+                cart.SetFlashSelect(arg.SelectedFlash);
 
                 int sectorCount = (int)Math.Ceiling((double)arg.Size / arg.SectorSize);
 
@@ -1437,7 +1443,7 @@ namespace Brutzler
                     info.ProgressPercent = (i + 1) * 100 / sectorCount;
                     progress.Report(info);
 
-                    cart.EraseSector(arg.Offset + i * arg.SectorSize);
+                    cart.EraseSector(i * arg.SectorSize);
                     if (cart.PendingAck > MaxPendingAck)
                     {
                         cart.WaitAck();
@@ -1450,7 +1456,7 @@ namespace Brutzler
 
                 if (dataList != null)
                 {
-                    int addr = arg.Offset;
+                    int addr = 0;
                     int bytesWritten = 0;
                     foreach (byte[] dataPage in dataList)
                     {
@@ -1905,7 +1911,7 @@ namespace Brutzler
             }
         }
 
-        public byte SaveOffset
+        public int SaveOffset
         {
             get => _Config.SaveOffset;
             set
@@ -2060,7 +2066,7 @@ namespace Brutzler
     delegate List<byte[]> LoadData();
     class EraseAndWriteFlashWorkerArgument
     {
-        public int Offset { get; set; }
+        public FlashType SelectedFlash { get; set; }
         public int Size { get; set; }
         public int SectorSize { get; set; }
         public LoadData OnLoadData;
