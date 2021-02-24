@@ -18,6 +18,7 @@ using System.Windows.Input;
 using IniParser;
 using IniParser.Model;
 using IniParser.Parser;
+using System.Runtime.CompilerServices;
 
 namespace Brutzler
 {
@@ -27,13 +28,10 @@ namespace Brutzler
     public partial class MainWindow : Window, INotifyPropertyChanged
     {
         const int MaxPendingAck = 6;
-
-        const int RomMemoryOffset = 0;
         const int RomMemorySize = 64 * 1024 * 1024;
         const int RomSectorSize = 256 * 1024;
         const int RomPageSize = 256;
         const int RomPartitionSize = 2 * 1024 * 1024;
-        const int BootMemoryOffset = RomMemorySize;
         const int BootMemorySize = 8 * 1024 * 1024;
         const int BootSectorSize = 4 * 1024;
         const int BootPageSize = 256;
@@ -995,9 +993,9 @@ namespace Brutzler
         #region Binding Properties
         public event PropertyChangedEventHandler PropertyChanged;
 
-        void OnPropertyChanged(string name)
+        void OnPropertyChanged([CallerMemberName] string propertyName = "")
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
         int _FlashLevel = 0;
@@ -1009,7 +1007,7 @@ namespace Brutzler
                 if (value != _FlashLevel)
                 {
                     _FlashLevel = value;
-                    OnPropertyChanged("FlashLevel");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1025,7 +1023,7 @@ namespace Brutzler
                 if (value != _SramLevel)
                 {
                     _SramLevel = value;
-                    OnPropertyChanged("SramLevel");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1829,7 +1827,7 @@ namespace Brutzler
                 if (value != _Config.FullId)
                 {
                     _Config.FullId = value;
-                    OnPropertyChanged("FullId");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1842,7 +1840,7 @@ namespace Brutzler
                 if (value != _Config.Name)
                 {
                     _Config.Name = value;
-                    OnPropertyChanged("Name");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1854,7 +1852,7 @@ namespace Brutzler
                 if (value != _Config.RomSize)
                 {
                     _Config.RomSize = value;
-                    OnPropertyChanged("Size");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1867,7 +1865,7 @@ namespace Brutzler
                 if (value != _Config.RomCrc)
                 {
                     _Config.RomCrc = value;
-                    OnPropertyChanged("Crc");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1880,7 +1878,7 @@ namespace Brutzler
                 if (value != _Config.Tv)
                 {
                     _Config.Tv = value;
-                    OnPropertyChanged("Tv");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1893,7 +1891,7 @@ namespace Brutzler
                 if (value != _Config.Cic)
                 {
                     _Config.Cic = value;
-                    OnPropertyChanged("Cic");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1906,7 +1904,7 @@ namespace Brutzler
                 if (value != _Config.Save)
                 {
                     _Config.Save = value;
-                    OnPropertyChanged("Save");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1919,7 +1917,7 @@ namespace Brutzler
                 if (value != _Config.SaveOffset)
                 {
                     _Config.SaveOffset = value;
-                    OnPropertyChanged("SaveOffset");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1933,7 +1931,7 @@ namespace Brutzler
                 if (value != _FileName)
                 {
                     _FileName = value;
-                    OnPropertyChanged("FileName");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1947,7 +1945,7 @@ namespace Brutzler
                 if (value != _IsAutoBoot)
                 {
                     _IsAutoBoot = value;
-                    OnPropertyChanged("IsAutoBoot");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1961,7 +1959,7 @@ namespace Brutzler
                 if (value != _IsFlashed)
                 {
                     _IsFlashed = value;
-                    OnPropertyChanged("IsFlashed");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1975,14 +1973,14 @@ namespace Brutzler
                 if (value != _IsSaveRamAllocated)
                 {
                     _IsSaveRamAllocated = value;
-                    OnPropertyChanged("IsSaveRamAllocated");
+                    OnPropertyChanged();
                 }
             }
         }
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        void OnPropertyChanged(string name)
+        void OnPropertyChanged([CallerMemberName] string name = "")
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }

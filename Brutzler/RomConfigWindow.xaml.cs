@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -178,9 +179,9 @@ namespace BrutzelProg
         int _Tv;
         int _Save;
 
-        protected void OnPropertyChanged(string name)
+        protected void OnPropertyChanged([CallerMemberName] string propertyName = "")
         {
-            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
 
         public string GameId
@@ -197,7 +198,7 @@ namespace BrutzelProg
                 if (string.Compare(value, _GameName) != 0)
                 {
                     _GameName = value ?? "";
-                    OnPropertyChanged("GameName");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -209,7 +210,7 @@ namespace BrutzelProg
                 if (value != _Cic)
                 {
                     _Cic = value;
-                    OnPropertyChanged("Cic");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -222,7 +223,7 @@ namespace BrutzelProg
                 if (value != _Tv)
                 {
                     _Tv = value;
-                    OnPropertyChanged("Tv");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -235,7 +236,7 @@ namespace BrutzelProg
                 if (value != _Save)
                 {
                     _Save = value;
-                    OnPropertyChanged("Save");
+                    OnPropertyChanged();
                 }
             }
         }

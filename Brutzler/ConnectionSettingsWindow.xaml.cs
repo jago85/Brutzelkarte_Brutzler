@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows;
@@ -86,7 +87,7 @@ namespace Brutzler
             set
             {
                 _PortNames = value;
-                OnPropertyChanged(nameof(PortNames));
+                OnPropertyChanged();
             }
         }
 
@@ -99,7 +100,7 @@ namespace Brutzler
                 if (_ConnectOnStart != value)
                 {
                     _ConnectOnStart = value;
-                    OnPropertyChanged(nameof(ConnectOnStart));
+                    OnPropertyChanged();
                 }
             }
         }
@@ -110,7 +111,7 @@ namespace Brutzler
 
         public event PropertyChangedEventHandler PropertyChanged;
 
-        void OnPropertyChanged(string propertyName)
+        void OnPropertyChanged([CallerMemberName] string propertyName = "")
         {
             PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
         }
