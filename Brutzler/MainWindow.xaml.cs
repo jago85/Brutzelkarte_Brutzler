@@ -1054,6 +1054,10 @@ namespace Brutzler
             {
                 return;
             }
+            if (!CheckCartConnection())
+            {
+                return;
+            }
             if (_FlashManager == null)
             {
                 UpdateMemorySizes();
