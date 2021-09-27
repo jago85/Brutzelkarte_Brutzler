@@ -111,7 +111,7 @@ namespace Brutzler
             if ((Settings.Default.ConnectOnStartup)
                 && (!String.IsNullOrEmpty(ComPort)))
             {
-                LoadCardContent();
+                LoadFromCart();
             }
         }
 
@@ -187,6 +187,15 @@ namespace Brutzler
             var flashedRoms = RomList.Where(r => r.IsFlashed == true ).ToArray();
             foreach (var rom in flashedRoms)
                 RemoveRom(rom);
+        }
+
+        private void ClearAllContent()
+        {
+            RemoveAllRoms();
+            FlashLevel = 0;
+            SramLevel = 0;
+            _FlashManager = null;
+            _SaveRamManager = null;
         }
 
         void EditRom(RomListViewItem item)
@@ -629,7 +638,13 @@ namespace Brutzler
             wnd.Owner = this;
             if (wnd.ShowDialog().Value == true)
             {
+                // Card could have changed, clear everything
+                string oldPort = ComPort;
                 ComPort = wnd.SelectedPort;
+                if (!oldPort.Equals(ComPort))
+                {
+                    ClearAllContent();
+                }                
                 Settings.Default.ComPort = wnd.SelectedPort;
                 Settings.Default.ConnectOnStartup = wnd.ConnectOnStart;
                 Settings.Default.Save();
@@ -712,6 +727,24 @@ namespace Brutzler
         {
             _FlashManager = new FlashManager(_RomMemorySize / RomPartitionSize, RomPartitionSize);
             _SaveRamManager = new SaveRamManager(_SaveRamSize, SaveRamFragmentSize);
+        }
+
+        private bool CheckCartConnection()
+        {
+            try
+            {
+                Brutzelkarte cart = new Brutzelkarte(ComPort);
+
+                cart.Open();
+                cart.ReadVersion();
+                cart.Close();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "Connection Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+            return true;
         }
 
         bool CheckDeviceSelected()
@@ -959,7 +992,16 @@ namespace Brutzler
 
         private void MenuItem_LoadFromCartClick(object sender, RoutedEventArgs e)
         {
+            LoadFromCart();
+        }
+
+        private void LoadFromCart()
+        {
             if (!CheckDeviceSelected())
+            {
+                return;
+            }
+            if (!CheckCartConnection())
             {
                 return;
             }
