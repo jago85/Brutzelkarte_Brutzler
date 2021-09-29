@@ -1133,7 +1133,7 @@ namespace Brutzler
                 if (newSize != _RomMemorySize)
                 {
                     _RomMemorySize = newSize;
-                    OnPropertyChanged("FlashSizeMib");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -1161,7 +1161,7 @@ namespace Brutzler
                 if (_SaveRamSize != newSize)
                 {
                     _SaveRamSize = newSize;
-                    OnPropertyChanged("SramSizeKib");
+                    OnPropertyChanged();
                 }
             }
         }
