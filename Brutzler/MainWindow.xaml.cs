@@ -49,8 +49,8 @@ namespace Brutzler
         int _RomMemorySize = 64 * 1024 * 1024;
         int _SaveRamSize = 256 * 1024;
 
-        FlashManager _FlashManager;// = new FlashManager(RomMemorySize / RomPartitionSize, RomPartitionSize);
-        SaveRamManager _SaveRamManager;// = new SaveRamManager(SaveRamSize, SaveRamFragmentSize);
+        FlashManager _FlashManager;
+        SaveRamManager _SaveRamManager;
 
         public MainWindow()
         {
