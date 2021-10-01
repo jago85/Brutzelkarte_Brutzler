@@ -9,20 +9,30 @@
         Title="BRUTZLER" Height="480" Width="620" Loaded="Window_Loaded">
     <Window.Resources>
         <local:ByteToMbConverter x:Key="ByteToMbConverter"/>
-        <local:MemoryOverflowConverter x:Key="MemoryOverflowConverter"/>
+        <local:MemoryOverflowConverter2 x:Key="MemoryOverflowConverter2"/>
         <local:BoolToVisibleOrHidden x:Key="BoolToVisConverter"/>
-        <sys:Int32 x:Key="FlashSize">64</sys:Int32>
-        <sys:Int32 x:Key="SramSize">256</sys:Int32>
         <Style TargetType="ProgressBar" x:Key="ColorByFlashLevel">
             <Style.Triggers>
-                <DataTrigger Binding="{Binding Path=FlashLevel, Converter={StaticResource MemoryOverflowConverter}, ConverterParameter={StaticResource FlashSize}}" Value="True">
+                <DataTrigger Value="True">
+                    <DataTrigger.Binding>
+                        <MultiBinding Converter="{StaticResource MemoryOverflowConverter2}">
+                            <Binding Path="FlashLevel"/>
+                            <Binding Path="FlashSizeMib"/>
+                        </MultiBinding>
+                    </DataTrigger.Binding>
                     <Setter Property="Foreground" Value="#FFBD1A1A" />
                 </DataTrigger>
             </Style.Triggers>
         </Style>
         <Style TargetType="ProgressBar" x:Key="ColorBySramLevel">
             <Style.Triggers>
-                <DataTrigger Binding="{Binding Path=SramLevel, Converter={StaticResource MemoryOverflowConverter}, ConverterParameter={StaticResource SramSize}}" Value="True">
+                <DataTrigger Value="True">
+                    <DataTrigger.Binding>
+                        <MultiBinding Converter="{StaticResource MemoryOverflowConverter2}">
+                            <Binding Path="SramLevel"/>
+                            <Binding Path="SramSizeKib"/>
+                        </MultiBinding>
+                    </DataTrigger.Binding>
                     <Setter Property="Foreground" Value="#FFBF2727" />
                 </DataTrigger>
             </Style.Triggers>
@@ -125,15 +135,19 @@
             <StackPanel Margin="10,0,0,65" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom">
                 <TextBlock Text="FLASH Level: " HorizontalAlignment="Left"/>
                 <TextBlock Text="{Binding FlashLevel, FallbackValue=0}" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                <TextBlock Text=" of 64 MiB" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <TextBlock Text=" of " HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <TextBlock Text="{Binding FlashSizeMib, FallbackValue=0}" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <TextBlock Text=" MiB" HorizontalAlignment="Left" VerticalAlignment="Top"/>
             </StackPanel>
-            <ProgressBar HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10,0,0,50" Width="185" Maximum="64" Value="{Binding FlashLevel}" Style="{StaticResource ColorByFlashLevel}" Height="10"/>
+            <ProgressBar HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10,0,0,50" Width="185" Maximum="{Binding FlashSizeMib}" Value="{Binding FlashLevel}" Style="{StaticResource ColorByFlashLevel}" Height="10"/>
             <StackPanel Margin="10,0,0,25" Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Bottom">
                 <TextBlock Text="SRAM Level: " HorizontalAlignment="Left" VerticalAlignment="Top"/>
                 <TextBlock Text="{Binding SramLevel, FallbackValue=0}" HorizontalAlignment="Left" VerticalAlignment="Top"/>
-                <TextBlock Text=" of 256 KiB" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <TextBlock Text=" of " HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <TextBlock Text="{Binding SramSizeKib, FallbackValue=0}" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                <TextBlock Text=" KiB" HorizontalAlignment="Left" VerticalAlignment="Top"/>
             </StackPanel>
-            <ProgressBar HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10,0,0,10" Width="185" Maximum="256" Value="{Binding SramLevel}" Style="{StaticResource ColorBySramLevel}" Height="10"/>
+            <ProgressBar HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="10,0,0,10" Width="185" Maximum="{Binding SramSizeKib}" Value="{Binding SramLevel}" Style="{StaticResource ColorBySramLevel}" Height="10"/>
         </Grid>
     </DockPanel>
 </Window>

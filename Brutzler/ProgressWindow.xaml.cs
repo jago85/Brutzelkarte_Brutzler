@@ -80,7 +80,7 @@ namespace Brutzler
                 if (value != _ProgressValue)
                 {
                     _ProgressValue = value;
-                    OnPropertyChanged("ProgressValue");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -93,7 +93,7 @@ namespace Brutzler
                 if (value != _ProgressState)
                 {
                     _ProgressState = value;
-                    OnPropertyChanged("ProgressState");
+                    OnPropertyChanged();
                 }
             }
         }
@@ -106,7 +106,7 @@ namespace Brutzler
                 if (_ActionText != value)
                 {
                     _ActionText = value;
-                    OnPropertyChanged("ActionText");
+                    OnPropertyChanged();
                 }
             }
         }
