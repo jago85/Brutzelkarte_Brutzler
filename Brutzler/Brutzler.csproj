@@ -70,6 +70,7 @@
     <Compile Include="ConnectionSettingsWindow.xaml.cs">
       <DependentUpon>ConnectionSettingsWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="JedParser.cs" />
     <Compile Include="Page1.xaml.cs">
       <DependentUpon>Page1.xaml</DependentUpon>
     </Compile>
