@@ -812,7 +812,7 @@ namespace Brutzler
         private void MenuItem_UpdateFpga_Click(object sender, RoutedEventArgs e)
         {
             OpenFileDialog d = new OpenFileDialog();
-            d.Filter = "binary files (*.bin)|*.bin";
+            d.Filter = "JEDEC files (*.jed)|*.jed";
             if (d.ShowDialog().Value == true)
             {
                 RunTaskInProgressWindow("Update FPGA", Action_UpdateFpga, d.FileName);
@@ -1636,26 +1636,35 @@ namespace Brutzler
             var cart = new Brutzelkarte(ComPort);
             try
             {
+                info.ActionText = "Reading file";
+                progress.Report(info);
+
+                // Parse the file
+                JedParser jedParser = new JedParser(filename);
+                jedParser.Parse();
+                byte[] binData = jedParser.Image;
+
+                // Split data into 16 byte chunks
+                List<byte[]> dataList = new List<byte[]>();
+                using (MemoryStream ms = new MemoryStream(binData))
+                {
+                    while (ms.Position < ms.Length)
+                    {
+                        // TODO: Check max bitstream size
+                        // For the test the size was 176 KiB
+                        if (ms.Position > 250 * 1024)
+                            break;
+                        byte[] data = new byte[16];
+                        ms.Read(data, 0, data.Length);
+                        dataList.Add(data);
+                    }
+                }
+
                 info.ActionText = "Connecting";
                 progress.Report(info);
 
                 cart.Open();
                 cart.ReadVersion();
-
-                List<byte[]> dataList = new List<byte[]>();
-                using (FileStream fs = File.Open(filename, FileMode.Open, FileAccess.Read))
-                {
-                    while (fs.Position < fs.Length)
-                    {
-                        // TODO: Check max bitstream size
-                        // For the test the size was 176 KiB
-                        if (fs.Position > 250 * 1024)
-                            break;
-                        byte[] data = new byte[16];
-                        fs.Read(data, 0, data.Length);
-                        dataList.Add(data);
-                    }
-                }
 
                 // Read Device ID
                 cart.WriteEfb8Bit(0x70, 0x80);
