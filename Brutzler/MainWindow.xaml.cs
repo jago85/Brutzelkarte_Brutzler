@@ -56,42 +56,6 @@ namespace Brutzler
         {
             InitializeComponent();
 
-            //DragonFs dfs = new DragonFs();
-            //byte[] test = new byte[800];
-            //using (DfsFileStream fs = dfs.OpenFile(DfsConfigPath, FileAccess.Write))
-            //{
-            //    Random rnd = new Random();
-            //    rnd.NextBytes(test);
-
-            //    fs.Write(test, 0, test.Length);
-            //}
-
-            //using (var file = File.OpenWrite("test.dfs"))
-            //{
-            //    dfs.WriteToStream(file);
-            //}
-            //dfs = null;
-
-            //using (var file = File.OpenRead("test.dfs"))
-            //{
-            //    dfs = DragonFs.CreateFromStream(file);
-            //}
-
-            //dfs.TestSectorsReferences();
-            //Array.Clear(test, 0, test.Length);
-
-            //using (var fs = dfs.OpenFile(DfsConfigPath, FileAccess.Read))
-            //{
-            //    fs.Read(test, 0, test.Length);
-            //}
-
-            //DispatcherTimer dispatcherTimer = new DispatcherTimer();
-            //dispatcherTimer.Interval = new TimeSpan(0, 0, 1);
-            //dispatcherTimer.Tick += new EventHandler((s, e) => {
-            //    FlashLevel += 10;
-            //});
-            //dispatcherTimer.Start();
-
             Title = "BRUTZLER v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
 
             RomList = new ObservableCollection<RomListViewItem>();
