@@ -168,6 +168,10 @@ namespace Brutzler
                                             b |= 1;
                                             checksumByte |= (byte)(1 << bit);
                                         }
+                                        else if (binStr[bit] != '0')
+                                        {
+                                            throw new Exception("Unexpected bit value found in data.");
+                                        }
                                         pos++;
                                         if (pos >= dat.Length)
                                             break;
