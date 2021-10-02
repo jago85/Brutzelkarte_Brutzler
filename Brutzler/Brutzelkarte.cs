@@ -35,6 +35,8 @@ namespace BrutzelProg
         StxEtxParser _AckParser = new StxEtxParser();
         EventWaitHandle _WaitHandle = new EventWaitHandle(false, EventResetMode.AutoReset);
 
+        FirmwareIdentity _FirmwareIdentity;
+
         public Brutzelkarte(string portName)
         {
             _PortName = portName;
@@ -118,7 +120,7 @@ namespace BrutzelProg
             stream.WriteByte((byte)Commands.SetAddr);
             WriteIntBe(stream, addr);
             stream.EndPacket();
-            
+
             byte[] bytes = stream.GetBytes();
             uint bytesWritten = 0;
             FT_STATUS status = _Ftdi.Write(bytes, bytes.Length, ref bytesWritten);
@@ -388,7 +390,7 @@ namespace BrutzelProg
             return ReceiveResponse();
         }
 
-        public UInt32 ReadVersion()
+        public FirmwareIdentity ReadVersion()
         {
             byte[] cmdData = new byte[] {
                 (byte)Commands.ReadVersion
@@ -405,9 +407,14 @@ namespace BrutzelProg
 
             byte[] result = ReceiveResponse();
 
-            return (UInt32)((result[0] << 24) | (result[1] << 16) | (result[2] << 8) | (result[3] << 0));
+            _FirmwareIdentity.Id = result[0];
+            _FirmwareIdentity.Major = result[1];
+            _FirmwareIdentity.Minor = result[2];
+            _FirmwareIdentity.Debug = result[3];
+
+            return _FirmwareIdentity;
         }
-        
+
         public void WriteEfb(int addr, byte[] data, int offset, int count)
         {
             if (addr > 0xff)
@@ -506,12 +513,30 @@ namespace BrutzelProg
         {
             get => _PendingAck;
         }
+
+        public FirmwareIdentity FirmwareIdentity
+        {
+            get => _FirmwareIdentity;
+        }
     }
 
     public enum FlashType
     { 
         Rom,
         Boot
+    }
+
+    public struct FirmwareIdentity
+    {
+        public byte Id;
+        public byte Major;
+        public byte Minor;
+        public byte Debug;
+
+        public override string ToString()
+        {
+            return String.Format("ID:{0} v{1}.{2}.{3}", Id, Major, Minor, Debug);
+        }
     }
 
     public class BrutzelkarteDummy
