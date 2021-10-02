@@ -107,6 +107,7 @@ namespace Brutzler
                     {
                         sb.Append(inStr[pos++]);
                     }
+                    pos++;
 
                     // Skip Notes
                     if (code != 'N')
@@ -149,10 +150,11 @@ namespace Brutzler
                             {
                                 // Consume every line which has 128 ASCII bits
                                 string dat = t.Item2[i];
-                                for (int p = 0; p < dat.Length; p += 8)
+                                int pos = 0;
+                                while (pos < dat.Length)
                                 {
                                     // convert 8 ASCII bits to a byte
-                                    string binStr = dat.Substring(p, 8);
+                                    string binStr = dat.Substring(pos, Math.Min(dat.Length - pos,8));
                                     byte b = 0;
                                     for (int bit = 0; bit < 8; bit++)
                                     {
@@ -161,6 +163,9 @@ namespace Brutzler
                                         {
                                             b |= 1;
                                         }
+                                        pos++;
+                                        if (pos >= dat.Length)
+                                            break;
                                     }
                                     
                                     // Write the byte to the buffer
