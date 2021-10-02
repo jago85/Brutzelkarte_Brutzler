@@ -998,11 +998,18 @@ namespace Brutzler
 
         private void MenuItem_EraseBootFlash_Click(object sender, RoutedEventArgs e)
         {
-            EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument();
-            arg.SelectedFlash = FlashType.Boot;
-            arg.Size = BootMemorySize;
-            arg.SectorSize = BootSectorSize;
-            RunTaskInProgressWindow("Erase Bootloader", Action_EraseAndWriteFlash, arg);
+            MessageBoxResult result = MessageBox.Show("This erases the complete boot flash including the configuration file. "
+                                                    + "All your ROMs and savegames will effectively be lost.\r\n"
+                                                    + "If you only want to update the bootloader, you can upload a new one without deleting the flash first.\r\n\r\n"
+                                                    + "Are you sure?", "Erase Bootloader + Config", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
+            if (result == MessageBoxResult.OK)
+            {
+                EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument();
+                arg.SelectedFlash = FlashType.Boot;
+                arg.Size = BootMemorySize;
+                arg.SectorSize = BootSectorSize;
+                RunTaskInProgressWindow("Erase Bootloader", Action_EraseAndWriteFlash, arg);
+            }
         }
 
         private void MenuItem_SetRtc_Click(object sender, RoutedEventArgs e)
