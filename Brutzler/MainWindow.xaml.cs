@@ -693,21 +693,74 @@ namespace Brutzler
             _SaveRamManager = new SaveRamManager(_SaveRamSize, SaveRamFragmentSize);
         }
 
-        private bool CheckCartConnection()
+        private bool CheckCartVersion()
         {
+            bool cartNeedsUpdate = false;
+            bool cartUnknown = false;
+            FirmwareIdentity cartVersion;
+
             try
             {
                 Brutzelkarte cart = new Brutzelkarte(ComPort);
 
                 cart.Open();
-                cart.ReadVersion();
+                cartVersion = cart.ReadVersion();
                 cart.Close();
+
+                // Check version
+                switch (cartVersion.Id)
+                {
+                    case 4: // Cart v1: needs 0.3.0
+                        if (cartVersion.Major == 0)
+                        {
+                            if (cartVersion.Minor < 3)
+                                cartNeedsUpdate = true;
+                        }
+                        else
+                        {
+                            cartUnknown = true;
+                        }
+                        break;
+
+                    case 5: // Cart v2: needs 0.1.0
+                        if (cartVersion.Major == 0)
+                        {
+                            if (cartVersion.Minor < 1)
+                                cartNeedsUpdate = true;
+                        }
+                        else
+                        {
+                            cartUnknown = true;
+                        }
+                        break;
+
+                    default:
+                        cartUnknown = true;
+                        break;
+                }
+
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "Connection Error", MessageBoxButton.OK, MessageBoxImage.Error);
                 return false;
             }
+
+            if (cartNeedsUpdate)
+            {
+                MessageBox.Show(
+                    String.Format("The card firmware is too old. ({0}).\r\n"
+                                + "Please update your cart.", cartVersion), 
+                    "Update required", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+
+            if (cartUnknown)
+                MessageBox.Show(
+                    String.Format("The card reports an unknown firmware version. ({0}).\r\n"
+                                + "It may not work properly.", cartVersion), 
+                    "Unknwon Cart Firmware", MessageBoxButton.OK, MessageBoxImage.Warning);
+
             return true;
         }
 
@@ -965,7 +1018,7 @@ namespace Brutzler
             {
                 return;
             }
-            if (!CheckCartConnection())
+            if (!CheckCartVersion())
             {
                 return;
             }
@@ -1018,7 +1071,7 @@ namespace Brutzler
             {
                 return;
             }
-            if (!CheckCartConnection())
+            if (!CheckCartVersion())
             {
                 return;
             }
