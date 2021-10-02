@@ -828,11 +828,19 @@ namespace Brutzler
 
         private void MenuItem_UpdateFpga_Click(object sender, RoutedEventArgs e)
         {
-            OpenFileDialog d = new OpenFileDialog();
-            d.Filter = "JEDEC files (*.jed)|*.jed";
-            if (d.ShowDialog().Value == true)
+            MessageBoxResult result = MessageBox.Show("Please double check to select the correct FPGA image.\r\n"
+                                                    + "Flashing the wrong file or interrupting the process will likely brick your cartridge.\r\n"
+                                                    + "A bricked cartridge can still be revived with a JTAG programmer.\r\n\r\n"
+                                                    + "The process starts immediately after the file is opened.\r\n"
+                                                    + "Would you like to proceed?", "Update FPGA", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
+            if (result == MessageBoxResult.OK)
             {
-                RunTaskInProgressWindow("Update FPGA", Action_UpdateFpga, d.FileName);
+                OpenFileDialog d = new OpenFileDialog();
+                d.Filter = "JEDEC files (*.jed)|*.jed";
+                if (d.ShowDialog().Value == true)
+                {
+                    RunTaskInProgressWindow("Update FPGA", Action_UpdateFpga, d.FileName);
+                }
             }
         }
 
