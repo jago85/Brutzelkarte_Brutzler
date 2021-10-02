@@ -13,6 +13,8 @@ namespace Brutzler
 
         byte[] _BinData;
         int _BitSize;
+        UInt16 _FuseChecksum;
+        UInt16 _CalculatedFuseChecksum;
 
         public JedParser(string filename)
         {
@@ -177,7 +179,11 @@ namespace Brutzler
                                 }
                             }
                         }
+                        _CalculatedFuseChecksum = checksum;
+                        break;
 
+                    case 'C': // Fuse Checksum
+                        _FuseChecksum = UInt16.Parse(t.Item2[0], System.Globalization.NumberStyles.HexNumber);
                         break;
                 }
             }
@@ -194,6 +200,13 @@ namespace Brutzler
         public int BitSize
         { 
             get => _BitSize;
+        }
+
+        public bool CheckSumValid
+        {
+            get {
+                return (_CalculatedFuseChecksum == _FuseChecksum);
+            }
         }
     }
 }
