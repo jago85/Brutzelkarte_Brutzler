@@ -125,6 +125,7 @@ namespace Brutzler
         // All L fields will be written to the respective address
         void ReadBinData(Tuple<char, string[]>[] items)
         {
+            UInt16 checksum = 0;
             foreach (var t in items)
             {
                 switch (t.Item1)
@@ -156,20 +157,23 @@ namespace Brutzler
                                     // convert 8 ASCII bits to a byte
                                     string binStr = dat.Substring(pos, Math.Min(dat.Length - pos,8));
                                     byte b = 0;
+                                    byte checksumByte = 0;
                                     for (int bit = 0; bit < 8; bit++)
                                     {
                                         b <<= 1;
                                         if (binStr[bit] == '1')
                                         {
                                             b |= 1;
+                                            checksumByte |= (byte)(1 << bit);
                                         }
                                         pos++;
                                         if (pos >= dat.Length)
                                             break;
                                     }
-                                    
+
                                     // Write the byte to the buffer
                                     ms.WriteByte(b);
+                                    checksum += checksumByte;
                                 }
                             }
                         }
