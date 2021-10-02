@@ -13,8 +13,8 @@ namespace Brutzler
 
         byte[] _BinData;
         int _BitSize;
-        UInt16 _FuseChecksum;
-        UInt16 _CalculatedFuseChecksum;
+        UInt16 _FuseChecksum = 0xFFFF;
+        UInt16 _CalculatedFuseChecksum = 0;
 
         public JedParser(string filename)
         {
@@ -24,6 +24,10 @@ namespace Brutzler
         // Do the hard work
         public void Parse()
         {
+            // Init checksum and create an error state
+            _CalculatedFuseChecksum = 0;
+            _FuseChecksum = 0xFFFF;
+
             using (FileStream file = File.Open(_FileName, FileMode.Open))
             {
                 // Don't blow the memory
@@ -127,7 +131,6 @@ namespace Brutzler
         // All L fields will be written to the respective address
         void ReadBinData(Tuple<char, string[]>[] items)
         {
-            UInt16 checksum = 0;
             foreach (var t in items)
             {
                 switch (t.Item1)
@@ -179,11 +182,10 @@ namespace Brutzler
 
                                     // Write the byte to the buffer
                                     ms.WriteByte(b);
-                                    checksum += checksumByte;
+                                    _CalculatedFuseChecksum += checksumByte;
                                 }
                             }
                         }
-                        _CalculatedFuseChecksum = checksum;
                         break;
 
                     case 'C': // Fuse Checksum
