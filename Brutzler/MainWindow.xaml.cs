@@ -987,13 +987,14 @@ namespace Brutzler
                                                     + "Are you sure?", "Erase all ROMs", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
             if (result == MessageBoxResult.OK)
             {
-                EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument
+                EraseFlashWorkerArgument arg = new EraseFlashWorkerArgument
                 {
                     SelectedFlash = FlashType.Rom,
+                    StartOffset = 0,
                     Size = _RomMemorySize,
                     SectorSize = RomSectorSize
                 };
-                RunTaskInProgressWindow("Erase all ROMs", Action_EraseAndWriteFlash, arg);
+                RunTaskInProgressWindow("Erase all ROMs", Action_EraseFlash, arg);
             }
         }
 
@@ -1005,11 +1006,28 @@ namespace Brutzler
                                                     + "Are you sure?", "Erase Bootloader + Config", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
             if (result == MessageBoxResult.OK)
             {
-                EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument();
+                EraseFlashWorkerArgument arg = new EraseFlashWorkerArgument();
                 arg.SelectedFlash = FlashType.Boot;
+                arg.StartOffset = 0;
                 arg.Size = BootMemorySize;
                 arg.SectorSize = BootSectorSize;
-                RunTaskInProgressWindow("Erase Bootloader", Action_EraseAndWriteFlash, arg);
+                RunTaskInProgressWindow("Erase Bootloader", Action_EraseFlash, arg);
+            }
+        }
+
+        private void MenuItem_EraseConfig_Click(object sender, RoutedEventArgs e)
+        {
+            MessageBoxResult result = MessageBox.Show("This erases the the configuration file. "
+                                                    + "All your ROMs and savegames will effectively be lost.\r\n\r\n"
+                                                    + "Are you sure?", "Erase Config + Config", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
+            if (result == MessageBoxResult.OK)
+            {
+                EraseFlashWorkerArgument arg = new EraseFlashWorkerArgument();
+                arg.SelectedFlash = FlashType.Boot;
+                arg.StartOffset = DfsOffset;
+                arg.Size = 1024 * 1024; // TODO: Erase the real size of the DFS
+                arg.SectorSize = BootSectorSize;
+                RunTaskInProgressWindow("Erase Config", Action_EraseFlash, arg);
             }
         }
 
@@ -1576,21 +1594,11 @@ namespace Brutzler
             }
         }
 
-        void Action_EraseAndWriteFlash(IProgress<ProgressWindowInfo> progress, CancellationToken ct, object argument)
+        void Action_EraseFlash(IProgress<ProgressWindowInfo> progress, CancellationToken ct, object argument)
         {
-            EraseAndWriteFlashWorkerArgument arg = (EraseAndWriteFlashWorkerArgument)argument;
+            EraseFlashWorkerArgument arg = (EraseFlashWorkerArgument)argument;
 
             ProgressWindowInfo info = new ProgressWindowInfo();
-
-            // if OnLOadData is set, load the data and set the Size
-            List<byte[]> dataList = null;
-            if (arg.OnLoadData != null)
-            {
-                info.ActionText = "Loading data";
-                progress.Report(info);
-                dataList = arg.OnLoadData();
-                arg.Size = dataList.Count * 256;
-            }
 
             info.ActionText = "Connecting";
             progress.Report(info);
@@ -1612,7 +1620,7 @@ namespace Brutzler
                     info.ProgressPercent = (i + 1) * 100 / sectorCount;
                     progress.Report(info);
 
-                    cart.EraseSector(i * arg.SectorSize);
+                    cart.EraseSector(arg.StartOffset + i * arg.SectorSize);
                     if (cart.PendingAck > MaxPendingAck)
                     {
                         cart.WaitAck();
@@ -1621,31 +1629,6 @@ namespace Brutzler
                 while (cart.PendingAck > 0)
                 {
                     cart.WaitAck();
-                }
-
-                if (dataList != null)
-                {
-                    int addr = 0;
-                    int bytesWritten = 0;
-                    foreach (byte[] dataPage in dataList)
-                    {
-                        ct.ThrowIfCancellationRequested();
-
-                        cart.WritePage(addr, dataPage);
-                        if (cart.PendingAck > MaxPendingAck)
-                        {
-                            cart.WaitAck();
-                        }
-                        addr += dataPage.Length;
-                        bytesWritten += dataPage.Length;
-                        info.ActionText = String.Format("Writing {0} / {1} KiB", bytesWritten / 1024, arg.Size / 1024);
-                        info.ProgressPercent = (int)((Int64)bytesWritten * 100 / arg.Size);
-                        progress.Report(info);
-                    }
-                    while (cart.PendingAck > 0)
-                    {
-                        cart.WaitAck();
-                    }
                 }
             }
             catch (OperationCanceledException)
@@ -2262,12 +2245,13 @@ namespace Brutzler
 
 
     delegate List<byte[]> LoadData();
-    class EraseAndWriteFlashWorkerArgument
+    class EraseFlashWorkerArgument
     {
         public FlashType SelectedFlash { get; set; }
+
+        public int StartOffset { get; set; }
         public int Size { get; set; }
         public int SectorSize { get; set; }
-        public LoadData OnLoadData;
     }
 
     public enum RomEndianess

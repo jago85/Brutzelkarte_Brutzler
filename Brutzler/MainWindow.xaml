@@ -74,6 +74,7 @@
                 <Separator />
                 <MenuItem Header="Erase all ROMs" Click="MenuItem_EraseRomFlash_Click"/>
                 <MenuItem Header="Erase Bootloader" Click="MenuItem_EraseBootFlash_Click"/>
+                <MenuItem Header="Erase Config" Click="MenuItem_EraseConfig_Click"/>
                 <Separator />
                 <MenuItem Header="Clear all Saves" Click="MenuItem_ClearSram_Click"/>
                 <MenuItem Header="Dump SRAM" Click="MenuItem_DumpSramClick"/>
