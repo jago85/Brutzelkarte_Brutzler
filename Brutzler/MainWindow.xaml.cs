@@ -479,7 +479,6 @@ namespace Brutzler
             Brutzelkarte cart = new Brutzelkarte(ComPort);
 
             cart.Open();
-            cart.ReadVersion();
             cart.SetFlashSelect(FlashType.Boot);
             cart.SendAddr(DfsOffset / 4);
 
