@@ -1606,6 +1606,10 @@ namespace Brutzler
                 // Parse the file
                 JedParser jedParser = new JedParser(filename);
                 jedParser.Parse();
+
+                if (jedParser.CheckSumValid == false)
+                    throw new Exception("Invalid JEDEC fuse checksum.");
+
                 byte[] binData = jedParser.Image;
 
                 // Split data into 16 byte chunks
