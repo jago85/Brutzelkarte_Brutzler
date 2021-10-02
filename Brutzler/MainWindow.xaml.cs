@@ -983,7 +983,9 @@ namespace Brutzler
 
         private void MenuItem_EraseRomFlash_Click(object sender, RoutedEventArgs e)
         {
-            MessageBoxResult result = MessageBox.Show("This erases the complete ROM memory.\r\n\r\nAre you sure?", "Erase all ROMs", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
+            MessageBoxResult result = MessageBox.Show("This erases the complete ROM memory. "
+                                                    + "The configuration file will not be touched and the cartridge is left in an unconsistent state.\r\n\r\n"
+                                                    + "Are you sure?", "Erase all ROMs", MessageBoxButton.OKCancel, MessageBoxImage.Question, MessageBoxResult.Cancel);
             if (result == MessageBoxResult.OK)
             {
                 EraseAndWriteFlashWorkerArgument arg = new EraseAndWriteFlashWorkerArgument
